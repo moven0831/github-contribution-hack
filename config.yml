@@ -2,18 +2,18 @@
 
 # GitHub Personal Access Token (IMPORTANT: Keep this secret!)
 # Generate a token with repo access at https://github.com/settings/tokens
-github_token: YOUR_GITHUB_ACCESS_TOKEN
+github_token: DEMO_TOKEN_REPLACE_WITH_YOUR_REAL_TOKEN
 
 # List of repositories to make contributions to
 # Format: username/repository-name
 repositories:
-  - yourusername/your-repo1
-  - yourusername/your-repo2
+  - yourusername/demo-repo1
+  - yourusername/demo-repo2
 
 # Minimum and maximum number of commits per repository per run
-min_commits: 1
-max_commits: 3
+min_commits: 3
+max_commits: 5
 
 # Interval between contribution runs (in hours)
-min_interval: 12
+min_interval: 20
 max_interval: 24 
