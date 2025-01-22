@@ -16,4 +16,9 @@ max_commits: 5
 
 # Interval between contribution runs (in hours)
 min_interval: 20
-max_interval: 24 
+max_interval: 24
+
+split_commits:
+  enabled: true
+  max_lines_per_commit: 10
+  message_prefix: "Split commit" 

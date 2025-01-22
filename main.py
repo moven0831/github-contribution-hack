@@ -103,13 +103,39 @@ class GitHubContributionHack:
         # Write content to file
         with open(file_path, 'w') as f:
             f.write(content)
-        
-        # Stage and commit changes
-        repo.git.add(file_path)
-        repo.git.commit('-m', commit_message)
-        
-        # Push changes
-        repo.git.push('origin', 'main')
+
+        # Check if commit splitting is enabled
+        if self.config.get('split_commits', {}).get('enabled', False):
+            # Read the file contents
+            with open(file_path, 'r') as f:
+                lines = f.readlines()
+
+            max_lines = self.config['split_commits']['max_lines_per_commit']
+            prefix = self.config['split_commits']['message_prefix']
+
+            # Split the lines into chunks
+            line_chunks = [lines[i:i+max_lines] for i in range(0, len(lines), max_lines)]
+
+            # Make a separate commit for each chunk
+            for i, chunk in enumerate(line_chunks):
+                # Write the chunk to the file
+                with open(file_path, 'w') as f:
+                    f.writelines(chunk)
+
+                # Stage and commit changes
+                repo.git.add(file_path)
+                repo.git.commit('-m', f"{prefix} {i+1}/{len(line_chunks)}")
+
+            # Push changes
+            repo.git.push('origin', 'main')
+
+        else:
+            # Stage and commit changes
+            repo.git.add(file_path)
+            repo.git.commit('-m', commit_message)
+            
+            # Push changes
+            repo.git.push('origin', 'main')
     
     def run(self):
         """
