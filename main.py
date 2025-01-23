@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime, timedelta
 import git
 import github
+from dotenv import load_dotenv
 
 class GitHubContributionHack:
     def __init__(self, config_path='config.yml'):
@@ -14,14 +15,17 @@ class GitHubContributionHack:
         
         :param config_path: Path to the configuration file
         """
+        # Load environment variables
+        load_dotenv()
+        
         # Load configuration
         with open(config_path, 'r') as config_file:
             self.config = yaml.safe_load(config_file)
         
-        # Authenticate with GitHub
-        self.github_token = self.config.get('github_token')
+        # Get GitHub token from environment variable
+        self.github_token = os.getenv('GITHUB_TOKEN')
         if not self.github_token:
-            raise ValueError("GitHub access token is required in config.yml")
+            raise ValueError("GitHub access token is required in .env file")
         
         # Initialize GitHub connection
         self.g = github.Github(self.github_token)
