@@ -1,24 +1,20 @@
 # GitHub Contribution Hack Configuration
 
-# GitHub Personal Access Token (IMPORTANT: Keep this secret!)
-# Generate a token with repo access at https://github.com/settings/tokens
-github_token: DEMO_TOKEN_REPLACE_WITH_YOUR_REAL_TOKEN
-
 # List of repositories to make contributions to
 # Format: username/repository-name
 repositories:
-  - yourusername/demo-repo1
-  - yourusername/demo-repo2
+  - github-contribution-hack/demo-repo1
+  - github-contribution-hack/demo-repo2
 
 # Minimum and maximum number of commits per repository per run
-min_commits: 3
-max_commits: 5
+min_commits: 1
+max_commits: 3
 
 # Interval between contribution runs (in hours)
-min_interval: 20
+min_interval: 12
 max_interval: 24
 
 split_commits:
   enabled: true
-  max_lines_per_commit: 10
-  message_prefix: "Split commit" 
+  max_lines_per_commit: 5
+  message_prefix: "Automated commit" 

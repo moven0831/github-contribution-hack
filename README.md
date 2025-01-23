@@ -17,62 +17,64 @@ This project aims to create a program that automatically makes contributions to 
 - GitHub account with personal access token
 - Git installed on your system
 
+### Quick Start Demo
+
+To quickly see the GitHub Contribution Hack in action:
+
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/github-contribution-hack.git
+   cd github-contribution-hack  
+   ```
+
+2. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. Set up your GitHub token:
+   - Generate a GitHub Personal Access Token with `repo` scope at https://github.com/settings/tokens
+   - Copy the `.env.example` file to `.env`:
+     ```
+     cp .env.example .env
+     ```
+   - Replace `your_github_token_here` in `.env` with your actual token
+
+4. Run the demo:
+   ```
+   python main.py
+   ```
+
+The demo will start generating automated commits to the preconfigured public demo repositories. Check the `contribution_graph.png` in the `DEMO.md` file to see an example of the generated activity.
+
+Note: The demo repositories are public and read-only. To use the tool with your own repositories, update the repository list in `config.yml`.
+
 ### Installation
 
 1. Clone the repository:
    ```
    git clone https://github.com/yourusername/github-contribution-hack.git
-   cd github-contribution-hack
+   cd github-contribution-hack  
    ```
 
-2. Create a virtual environment (optional but recommended):
-   ```
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-   ```
-
-3. Install the required dependencies:
+2. Install the required dependencies:
    ```
    pip install -r requirements.txt
    ```
 
-4. Configure GitHub Access Token
-   - Go to [GitHub Settings > Developer Settings > Personal Access Tokens](https://github.com/settings/tokens)
-   - Generate a new token with `repo` scope
-   - Copy the token and replace `YOUR_GITHUB_ACCESS_TOKEN` in `config.yml`
+3. Set up your GitHub token:
+   - Generate a GitHub Personal Access Token with `repo` scope at https://github.com/settings/tokens
+   - Copy the `.env.example` file to `.env`:
+     ```
+     cp .env.example .env
+     ```
+   - Replace `your_github_token_here` in `.env` with your actual token
 
-5. Configure Repositories
-   - Edit `config.yml` and replace the repository list with your own repositories
-   - Example: `yourusername/your-repository`
+4. Run the demo:
+   ```
+   python main.py
+   ```
 
-### Usage
+The demo will start generating automated commits to the preconfigured public demo repositories. Check the `contribution_graph.png` in the `DEMO.md` file to see an example of the generated activity.
 
-Run the program using the following command:
-```
-python main.py
-```
-
-The program will start making automated contributions to your selected GitHub repositories based on the configured settings.
-
-### Configuration Options
-
-In `config.yml`, you can customize:
-- `github_token`: Your GitHub personal access token
-- `repositories`: List of repositories to contribute to
-- `min_commits` and `max_commits`: Range of commits per repository
-- `min_interval` and `max_interval`: Time between contribution runs (in hours)
-
-## Security Warning
-
-🚨 **IMPORTANT**: 
-- Never commit your actual GitHub token to version control
-- Keep your `config.yml` private
-- Use environment variables or secure token management for production use
-
-## Contributing
-
-Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request.
-
-## Disclaimer
-
-This tool is for educational purposes. Use responsibly and in compliance with GitHub's terms of service.
+Note: The demo repositories are public and read-only. To use the tool with your own repositories, update the repository list in `config.yml`.
