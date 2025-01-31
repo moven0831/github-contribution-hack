@@ -22,13 +22,9 @@ class GitHubContributionHack:
         with open(config_path, 'r') as config_file:
             self.config = yaml.safe_load(config_file)
         
-        # Get GitHub token from environment variable
-        self.github_token = os.getenv('GITHUB_TOKEN')
-        if not self.github_token:
-            raise ValueError("GitHub access token is required in .env file")
-        
-        # Initialize GitHub connection
-        self.g = github.Github(self.github_token)
+        self._validate_environment()
+        self._setup_secure_credentials()
+        self._configure_repository_access()
         
         # Get repositories to contribute to
         self.repositories = self.config.get('repositories', [])
@@ -43,6 +39,58 @@ class GitHubContributionHack:
         self.min_interval = self.config.get('min_interval', 12)
         self.max_interval = self.config.get('max_interval', 24)
     
+    def _validate_environment(self):
+        """Validate required environment setup"""
+        if not os.path.exists('.env'):
+            raise EnvironmentError(".env file missing - copy .env.example and configure credentials")
+            
+    def _setup_secure_credentials(self):
+        """Securely load and manage GitHub credentials"""
+        # Try loading from encrypted storage first
+        self.github_token = self._get_encrypted_token()
+        
+        if not self.github_token:
+            # Fallback to .env with user confirmation
+            if os.getenv('GITHUB_TOKEN'):
+                if self._prompt_for_encryption():
+                    self._encrypt_and_store_token(os.getenv('GITHUB_TOKEN'))
+                    self.github_token = os.getenv('GITHUB_TOKEN')
+                else:
+                    raise PermissionError("User declined secure storage setup")
+            else:
+                raise ValueError("No valid credentials found - run setup_security.py first")
+
+    def _get_encrypted_token(self):
+        """Retrieve encrypted token from secure storage"""
+        try:
+            # Use system keyring for secure storage
+            import keyring
+            encrypted_token = keyring.get_password('github_contribution', 'api_token')
+            return self._decrypt_token(encrypted_token) if encrypted_token else None
+        except Exception as e:
+            print(f"Secure storage error: {str(e)}")
+            return None
+
+    def _encrypt_and_store_token(self, token):
+        """Encrypt and securely store the token"""
+        # Use Fernet symmetric encryption
+        from cryptography.fernet import Fernet
+        key = Fernet.generate_key()
+        cipher_suite = Fernet(key)
+        encrypted_token = cipher_suite.encrypt(token.encode())
+        
+        # Store encrypted token in system keyring
+        import keyring
+        keyring.set_password('github_contribution', 'api_token', encrypted_token.decode())
+        
+        # Store encryption key in separate secure location
+        self._store_encryption_key(key)
+
+    def _prompt_for_encryption(self):
+        """Get user confirmation for credential encryption"""
+        print("Security recommendation: Store credentials in encrypted format")
+        return input("Encrypt and store credentials securely? (y/n): ").lower() == 'y'
+
     def generate_random_content(self):
         """
         Generate random content for commits
