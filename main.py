@@ -8,6 +8,7 @@ import git
 import github
 from dotenv import load_dotenv
 import json
+from analytics import ContributionAnalytics
 
 class GitHubContributionHack:
     def __init__(self, config_path='config.yml'):
@@ -42,6 +43,8 @@ class GitHubContributionHack:
         
         self.commit_pattern_model = self._load_commit_pattern_model()
         self.file_types = ['txt', 'md', 'py', 'js', 'json']
+        self.analytics = ContributionAnalytics()
+        self._setup_github_verification()
     
     def _validate_environment(self):
         """Validate required environment setup"""
@@ -168,27 +171,45 @@ class GitHubContributionHack:
                 
                 # Make random number of commits
                 num_commits = random.randint(self.min_commits, self.max_commits)
+                commits_made = []
+                total_lines = 0
+                file_ext = None
                 for _ in range(num_commits):
-                    self._make_single_commit(local_path)
+                    commit_message, content = self.generate_random_content()
+                    commits_made.append(commit_message)
+                    total_lines += len(content.splitlines())
+                    if file_ext is None:
+                        file_ext = content.split('.')[-1]
+                    self._make_single_commit(local_path, commit_message, content)
                 
                 print(f"Contributions made to {repo_name}")
+                
+                self.analytics.log_contribution(
+                    repo_name, 
+                    commit_count=len(commits_made),
+                    lines_changed=total_lines,
+                    file_type=file_ext
+                )
+                
+                # Verify with GitHub API
+                if self.config.get('verification', {}).get('enabled', True):
+                    self._verify_github_activity(repo_name, commits_made)
             
             except Exception as e:
                 print(f"Error contributing to {repo_name}: {e}")
     
-    def _make_single_commit(self, repo_path):
+    def _make_single_commit(self, repo_path, commit_message, content):
         """
         Make a single commit to the repository
         
         :param repo_path: Local path to the repository
+        :param commit_message: Commit message
+        :param content: Commit content
         """
         repo = git.Repo(repo_path)
         
         # Create a dummy file or modify an existing one
         file_path = os.path.join(repo_path, f'contribution_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt')
-        
-        # Generate commit content
-        commit_message, content = self.generate_random_content()
         
         # Write content to file
         with open(file_path, 'w') as f:
@@ -226,15 +247,32 @@ class GitHubContributionHack:
             
             # Push changes
             repo.git.push('origin', 'main')
-    
-    def _schedule_commits(self):
-        """Generate natural-looking commit intervals using Poisson distribution"""
-        lambda_param = 0.5  # Controls frequency of commits
+
+    def _verify_github_activity(self, repo_name, expected_commits):
+        """Verify commits appear on GitHub"""
+        from github import Github
+        g = Github(self.github_token)
+        repo = g.get_repo(repo_name)
+        
+        actual_commits = list(repo.get_commits(
+            since=datetime.now() - timedelta(hours=1)
+        ))
+        
+        if len(actual_commits) < len(expected_commits):
+            print(f"[WARNING] Missing commits on {repo_name} - " 
+                  f"Expected {len(expected_commits)}, Found {len(actual_commits)}")
+            self.analytics.log_verification_issue(repo_name)
+
+    def start_monitoring(self):
+        """Start real-time monitoring dashboard"""
+        from threading import Thread
+        Thread(target=self._monitoring_loop, daemon=True).start()
+
+    def _monitoring_loop(self):
+        """Continuous monitoring updates"""
         while True:
-            self.make_contributions()
-            # Use exponential distribution for natural time intervals
-            wait_time = random.expovariate(lambda_param) * 3600  # Convert to seconds
-            time.sleep(wait_time)
+            self.analytics.generate_report()
+            time.sleep(300)  # Update every 5 minutes
 
 def main():
     hack = GitHubContributionHack()

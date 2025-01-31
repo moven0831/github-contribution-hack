@@ -5,4 +5,7 @@ python-dotenv==1.0.0
 cryptography==42.0.8
 keyring==25.0.1
 markovify==0.9.6
-numpy==1.26.4 
+numpy==1.26.4
+rich==13.7.1
+scikit-learn==1.4.2
+matplotlib==3.8.4 
