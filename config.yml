@@ -17,4 +17,15 @@ max_interval: 24
 split_commits:
   enabled: true
   max_lines_per_commit: 5
-  message_prefix: "Automated commit" 
+  message_prefix: "Automated commit"
+
+intelligent_patterns:
+  enabled: true
+  content_types:
+    - documentation
+    - code
+    - config
+  time_distribution: poisson
+  markov_source: "commit_patterns.json"
+  max_commit_size: 100
+  min_commit_size: 10 

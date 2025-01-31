@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import git
 import github
 from dotenv import load_dotenv
+import json
 
 class GitHubContributionHack:
     def __init__(self, config_path='config.yml'):
@@ -38,6 +39,9 @@ class GitHubContributionHack:
         # Interval settings (in hours)
         self.min_interval = self.config.get('min_interval', 12)
         self.max_interval = self.config.get('max_interval', 24)
+        
+        self.commit_pattern_model = self._load_commit_pattern_model()
+        self.file_types = ['txt', 'md', 'py', 'js', 'json']
     
     def _validate_environment(self):
         """Validate required environment setup"""
@@ -91,12 +95,46 @@ class GitHubContributionHack:
         print("Security recommendation: Store credentials in encrypted format")
         return input("Encrypt and store credentials securely? (y/n): ").lower() == 'y'
 
+    def _load_commit_pattern_model(self):
+        """Load ML model for commit pattern prediction"""
+        try:
+            import markovify
+            with open("commit_patterns.json") as f:
+                return markovify.Text.from_json(f.read())
+        except Exception as e:
+            print(f"Pattern model error: {str(e)}")
+            return None
+
     def generate_random_content(self):
-        """
-        Generate random content for commits
-        
-        :return: Random commit message and content
-        """
+        """Generate context-aware commit content"""
+        if random.random() < 0.3 and self.commit_pattern_model:
+            # Generate ML-based commit message
+            message = self.commit_pattern_model.make_sentence()
+            content = self._generate_code_content() if random.random() < 0.4 else self._generate_doc_content()
+        else:
+            # Fallback to random content
+            message, content = self._basic_content_generation()
+            
+        return message, content
+
+    def _generate_code_content(self):
+        """Generate simple code-like content"""
+        languages = {
+            'py': lambda: f"# {datetime.now()}\nprint('{random.choice(['Hello', 'World', 'Test'])}')",
+            'js': lambda: f"// {datetime.now()}\nconsole.log('{random.choice(['Debug', 'Info', 'Data'])}')",
+            'md': lambda: f"## Update {datetime.now()}\n- Item {random.randint(1,100)}",
+            'json': lambda: json.dumps({"timestamp": str(datetime.now()), "value": random.random()})
+        }
+        ext = random.choice(self.file_types)
+        return languages.get(ext, lambda: f"Content: {datetime.now()}")()
+
+    def _generate_doc_content(self):
+        """Generate simple document-like content"""
+        # Implement document content generation logic here
+        return f"Document content at {datetime.now()}"
+
+    def _basic_content_generation(self):
+        """Fallback to basic content generation"""
         commit_messages = [
             "Maintain contribution streak",
             "Daily code update",
@@ -189,22 +227,18 @@ class GitHubContributionHack:
             # Push changes
             repo.git.push('origin', 'main')
     
-    def run(self):
-        """
-        Run the contribution hack continuously
-        """
+    def _schedule_commits(self):
+        """Generate natural-looking commit intervals using Poisson distribution"""
+        lambda_param = 0.5  # Controls frequency of commits
         while True:
-            # Make contributions
             self.make_contributions()
-            
-            # Sleep for a random interval
-            sleep_hours = random.uniform(self.min_interval, self.max_interval)
-            print(f"Sleeping for {sleep_hours:.2f} hours")
-            time.sleep(sleep_hours * 3600)
+            # Use exponential distribution for natural time intervals
+            wait_time = random.expovariate(lambda_param) * 3600  # Convert to seconds
+            time.sleep(wait_time)
 
 def main():
     hack = GitHubContributionHack()
-    hack.run()
+    hack._schedule_commits()
 
 if __name__ == '__main__':
     main() 
