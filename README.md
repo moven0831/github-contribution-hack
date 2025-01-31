@@ -7,6 +7,9 @@ This project aims to create a program that automatically makes contributions to 
 - Automatically create commits and push them to GitHub on a regular schedule
 - Configurable settings for commit frequency and repository selection
 - Seamless integration with GitHub API for authentication and contribution tracking
+- **Enhanced Security**: Encrypted credential storage and system keyring integration
+- **Intelligent Patterns**: ML-powered commit messages and natural time distribution
+- **Real-Time Monitoring**: Interactive dashboard with streak analytics and verification
 - Cross-platform compatibility (Windows, macOS, Linux)
 
 ## Getting Started
@@ -16,6 +19,75 @@ This project aims to create a program that automatically makes contributions to 
 - Python 3.x installed
 - GitHub account with personal access token
 - Git installed on your system
+- [Optional] Node.js v18+ for advanced monitoring features
+
+### Security Setup
+
+Instead of manual .env configuration, run the security initialization:
+```bash
+python setup_security.py
+```
+This will guide you through:
+1. Encrypting your GitHub token
+2. Setting up system keyring integration
+3. Configuring automatic credential rotation
+
+### Intelligent Commit Configuration
+
+Enable smart patterns in `config.yml`:
+```yaml
+intelligent_patterns:
+  enabled: true
+  content_types: [code, docs, config]
+  time_distribution: poisson
+```
+
+### Monitoring Dashboard
+
+Start the interactive analytics dashboard:
+```bash
+python main.py --monitor
+```
+
+Key monitoring features:
+- Real-time contribution graph
+- Streak success probability estimation
+- Repository activity distribution
+- Automated GitHub commit verification
+
+## Advanced Features
+
+### Security Recommendations
+```bash
+# Rotate credentials monthly
+python setup_security.py --rotate
+
+# Audit stored credentials
+python setup_security.py --audit
+```
+
+### Pattern Customization
+1. Collect historical commits in commit_patterns.json
+2. Retrain the ML model:
+```bash
+python train_patterns.py --input commit_patterns.json
+```
+
+### Analytics Integration
+View historical reports:
+```bash
+python analytics.py --report weekly-summary
+```
+
+Export monitoring data:
+```bash
+python analytics.py --export csv
+```
+
+Note: The monitoring dashboard requires additional dependencies:
+```bash
+pip install -r requirements-monitoring.txt
+```
 
 ### Quick Start Demo
 
