@@ -75,6 +75,32 @@ Key monitoring features:
 - Repository activity distribution
 - Automated GitHub commit verification
 
+## Development and Testing
+
+### Running Tests
+
+The project includes comprehensive unit tests for all functionality including MCP integration:
+
+```bash
+# Install testing dependencies
+pip install -r requirements.txt
+
+# Run all tests with coverage report
+python run_tests.py
+
+# Run specific test files
+pytest tests/test_mcp_integration.py
+```
+
+Test coverage reports are generated in the `coverage_html` directory.
+
+### Test Structure
+
+- `tests/test_mcp_integration.py`: Tests for the MCP client functionality
+- `tests/test_main_mcp.py`: Tests for integration with the main script
+
+For more details on testing, see [tests/README.md](tests/README.md).
+
 ## Advanced Features
 
 ### Security Recommendations

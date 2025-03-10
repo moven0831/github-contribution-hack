@@ -117,17 +117,21 @@ class MCPClient:
         
         url = f"{self.api_endpoint}/{endpoint}"
         
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            return response.json()
-        else:
-            print(f"MCP API Error: {response.status_code} - {response.text}")
+        try:
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"MCP API Error: {response.status_code} - {response.text}")
+                return None
+        except Exception as e:
+            print(f"MCP API Request Error: {str(e)}")
             return None
     
     def _generate_fallback_code(self, language: str) -> str:
@@ -138,6 +142,7 @@ class MCPClient:
         :return: Simple code snippet
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        random_num = random.randint(4, 100)
         
         if language == "python":
             return f"""# Generated fallback code
@@ -153,9 +158,9 @@ def process_data(items):
     return results
 
 # Example usage
-data = [1, 2, 3, {random.randint(4, 100)}]
-print(f"Processing data: {data}")
-print(f"Result: {process_data(data)}")
+data = [1, 2, 3, {random_num}]
+print(f"Processing data: {{data}}")
+print(f"Result: {{process_data(data)}}")
 """
         elif language == "javascript":
             return f"""// Generated fallback code
@@ -171,9 +176,9 @@ function processData(items) {{
 }}
 
 // Example usage
-const data = [1, 2, 3, {random.randint(4, 100)}];
-console.log(`Processing data: ${data}`);
-console.log(`Result: ${processData(data)}`);
+const data = [1, 2, 3, {random_num}];
+console.log(`Processing data: ${{data}}`);
+console.log(`Result: ${{processData(data)}}`);
 """
         elif language == "markdown":
             return f"""# Project Update
