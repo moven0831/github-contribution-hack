@@ -13,6 +13,17 @@ class ContributionAnalytics:
                              commit_count INTEGER, lines_changed INTEGER,
                              file_type TEXT)''')
 
+    def _setup_visualization(self):
+        """Setup visualization components"""
+        try:
+            from rich.console import Console
+            from rich.panel import Panel
+            self.console = Console()
+        except ImportError:
+            # Fallback if rich is not available
+            self.console = None
+            print("Warning: Rich library not available, visualization will be limited")
+
     def log_contribution(self, repo, commit_count, lines_changed, file_type):
         """Log contribution details to database"""
         self.cursor.execute('''INSERT INTO contributions VALUES 
@@ -46,7 +57,7 @@ class ContributionAnalytics:
         daily_counts = [row[0] for row in self.cursor.fetchall()]
         
         if len(daily_counts) < 2:
-            return 0.7  Default confidence
+            return 0.7  # Default confidence
             
         X = [[i] for i in range(len(daily_counts))]
         y = daily_counts

@@ -10,6 +10,7 @@ This project aims to create a program that automatically makes contributions to 
 - **Enhanced Security**: Encrypted credential storage and system keyring integration
 - **Intelligent Patterns**: ML-powered commit messages and natural time distribution
 - **Real-Time Monitoring**: Interactive dashboard with streak analytics and verification
+- **MCP Integration**: AI-powered code and commit generation for more realistic contributions
 - Cross-platform compatibility (Windows, macOS, Linux)
 
 ## Getting Started
@@ -20,6 +21,7 @@ This project aims to create a program that automatically makes contributions to 
 - GitHub account with personal access token
 - Git installed on your system
 - [Optional] Node.js v18+ for advanced monitoring features
+- [Optional] MCP API key for enhanced code generation
 
 ### Security Setup
 
@@ -42,6 +44,24 @@ intelligent_patterns:
   time_distribution: poisson
 ```
 
+### MCP Integration Setup
+
+For enhanced AI-powered code and commit generation:
+
+1. Obtain an MCP API key from the MCP dashboard
+2. Add your API key to the `.env` file:
+   ```
+   MCP_API_KEY=your_mcp_api_key_here
+   ```
+3. Enable MCP integration in `config.yml`:
+   ```yaml
+   mcp_integration:
+     enabled: true
+     complexity: "medium"  # low, medium, high
+   ```
+
+For full MCP integration documentation, see [MCP_INTEGRATION.md](MCP_INTEGRATION.md).
+
 ### Monitoring Dashboard
 
 Start the interactive analytics dashboard:
@@ -54,6 +74,32 @@ Key monitoring features:
 - Streak success probability estimation
 - Repository activity distribution
 - Automated GitHub commit verification
+
+## Development and Testing
+
+### Running Tests
+
+The project includes comprehensive unit tests for all functionality including MCP integration:
+
+```bash
+# Install testing dependencies
+pip install -r requirements.txt
+
+# Run all tests with coverage report
+python run_tests.py
+
+# Run specific test files
+pytest tests/test_mcp_integration.py
+```
+
+Test coverage reports are generated in the `coverage_html` directory.
+
+### Test Structure
+
+- `tests/test_mcp_integration.py`: Tests for the MCP client functionality
+- `tests/test_main_mcp.py`: Tests for integration with the main script
+
+For more details on testing, see [tests/README.md](tests/README.md).
 
 ## Advanced Features
 
@@ -71,6 +117,17 @@ python setup_security.py --audit
 2. Retrain the ML model:
 ```bash
 python train_patterns.py --input commit_patterns.json
+```
+
+### MCP Content Customization
+Adjust language distribution and code complexity:
+```yaml
+mcp_integration:
+  language_weights:
+    python: 0.6    # More Python code
+    javascript: 0.2
+    markdown: 0.2
+  complexity: "high"  # Generate more sophisticated code
 ```
 
 ### Analytics Integration
@@ -111,6 +168,7 @@ To quickly see the GitHub Contribution Hack in action:
      cp .env.example .env
      ```
    - Replace `your_github_token_here` in `.env` with your actual token
+   - Optional: Add your MCP API key to the `.env` file for enhanced content generation
 
 4. Run the demo:
    ```

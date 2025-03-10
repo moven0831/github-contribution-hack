@@ -9,6 +9,7 @@ import github
 from dotenv import load_dotenv
 import json
 from analytics import ContributionAnalytics
+from mcp_integration import MCPClient, get_mcp_client
 
 class GitHubContributionHack:
     def __init__(self, config_path='config.yml'):
@@ -45,6 +46,16 @@ class GitHubContributionHack:
         self.file_types = ['txt', 'md', 'py', 'js', 'json']
         self.analytics = ContributionAnalytics()
         self._setup_github_verification()
+        
+        # Initialize MCP client if MCP integration is enabled
+        self.mcp_client = None
+        if self.config.get('mcp_integration', {}).get('enabled', False):
+            try:
+                self.mcp_client = get_mcp_client()
+                print("MCP integration enabled successfully")
+            except Exception as e:
+                print(f"Failed to initialize MCP integration: {str(e)}")
+                print("Falling back to standard content generation")
     
     def _validate_environment(self):
         """Validate required environment setup"""
@@ -110,7 +121,10 @@ class GitHubContributionHack:
 
     def generate_random_content(self):
         """Generate context-aware commit content"""
-        if random.random() < 0.3 and self.commit_pattern_model:
+        # Check if MCP integration is enabled and client is available
+        if self.config.get('mcp_integration', {}).get('enabled', False) and self.mcp_client:
+            return self._generate_mcp_content()
+        elif random.random() < 0.3 and self.commit_pattern_model:
             # Generate ML-based commit message
             message = self.commit_pattern_model.make_sentence()
             content = self._generate_code_content() if random.random() < 0.4 else self._generate_doc_content()
@@ -148,6 +162,49 @@ class GitHubContributionHack:
         
         return random.choice(commit_messages), f"Contribution at {datetime.now()}"
     
+    def _generate_mcp_content(self):
+        """Generate content using MCP integration"""
+        try:
+            # Select a language based on configuration or random choice
+            language_weights = self.config.get('mcp_integration', {}).get('language_weights', {
+                'python': 0.4, 
+                'javascript': 0.3, 
+                'markdown': 0.2,
+                'text': 0.1
+            })
+            
+            # Choose language based on weights
+            languages = list(language_weights.keys())
+            weights = list(language_weights.values())
+            language = random.choices(languages, weights=weights, k=1)[0]
+            
+            # Generate code using MCP
+            context = {
+                "purpose": "github-contribution",
+                "complexity": self.config.get('mcp_integration', {}).get('complexity', 'low'),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            generated_code = self.mcp_client.generate_code(language, context)
+            
+            # Get file changes metadata for commit message generation
+            changes = [{
+                "file_type": language,
+                "size": len(generated_code),
+                "operation": "modify"
+            }]
+            
+            # Generate commit message
+            current_repo = random.choice(self.repositories)
+            commit_message = self.mcp_client.generate_commit_message(changes, current_repo)
+            
+            return commit_message, generated_code
+            
+        except Exception as e:
+            print(f"MCP content generation failed: {str(e)}")
+            # Fall back to basic content generation
+            return self._basic_content_generation()
+
     def make_contributions(self):
         """
         Make automated contributions to selected repositories
@@ -208,8 +265,22 @@ class GitHubContributionHack:
         """
         repo = git.Repo(repo_path)
         
+        # Determine file extension based on content
+        file_ext = "txt"  # Default fallback
+        
+        # MCP integration: Detect file type for better filename
+        if self.config.get('mcp_integration', {}).get('enabled', False):
+            if content.startswith("# ") or "def " in content or "import " in content:
+                file_ext = "py"
+            elif content.startswith("//") or "function " in content or "const " in content:
+                file_ext = "js"
+            elif content.startswith("# ") and "## " in content:
+                file_ext = "md"
+            elif content.startswith("{") or content.startswith("["):
+                file_ext = "json"
+        
         # Create a dummy file or modify an existing one
-        file_path = os.path.join(repo_path, f'contribution_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt')
+        file_path = os.path.join(repo_path, f'contribution_{datetime.now().strftime("%Y%m%d_%H%M%S")}.{file_ext}')
         
         # Write content to file
         with open(file_path, 'w') as f:
