@@ -30,6 +30,20 @@ intelligent_patterns:
   max_commit_size: 100
   min_commit_size: 10
 
+# MCP Integration Settings
+mcp_integration:
+  enabled: true
+  api_endpoint: "https://api.mcp.dev/v1"  # Set to your MCP API endpoint
+  complexity: "medium"                     # low, medium, high
+  language_weights:
+    python: 0.4
+    javascript: 0.3
+    markdown: 0.2
+    text: 0.1
+  repository_analysis: true
+  content_quality: "high"
+  dry_run: false                           # Set to true to test MCP without making actual commits
+
 monitoring:
   enabled: true
   dashboard_refresh: 300  # seconds
