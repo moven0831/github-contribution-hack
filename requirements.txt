@@ -10,8 +10,14 @@ rich==13.7.1
 scikit-learn==1.4.2
 matplotlib==3.8.4
 requests==2.31.0
+# Logging and error handling dependencies
+structlog==23.1.0
+python-json-logger==2.0.7
+tenacity==8.2.3
 
 # Testing dependencies
 pytest==7.4.0
 coverage==7.3.2
-pytest-cov==4.1.0 
+pytest-cov==4.1.0
+pytest-mock==3.10.0
+responses==0.23.1 
