@@ -122,4 +122,79 @@ class RetryableHTTP:
                 pass
         
         # Use default backoff
-        return default_backoff 
+        return default_backoff
+
+
+class RetryableError(Exception):
+    """Base exception class for errors that can be retried"""
+    pass
+
+
+class RetryWithBackoff:
+    """
+    Decorator class for retrying functions with exponential backoff
+    
+    Example usage:
+        @RetryWithBackoff(max_retries=3, base_delay=1.0)
+        def function_that_might_fail():
+            # function implementation
+    """
+    
+    def __init__(
+        self,
+        max_retries: int = 3,
+        base_delay: float = 1.0,
+        backoff_factor: float = 2.0,
+        jitter: bool = True,
+        retryable_exceptions: Tuple[Type[Exception], ...] = (RetryableError,),
+        on_retry: Optional[Callable[[Exception, int], None]] = None
+    ):
+        """
+        Initialize the retry decorator
+        
+        Args:
+            max_retries: Maximum number of retry attempts
+            base_delay: Initial delay between retries in seconds
+            backoff_factor: Multiplier for delay after each retry
+            jitter: Whether to add randomness to delay time
+            retryable_exceptions: Tuple of exception types that should trigger a retry
+            on_retry: Optional callback function called after each retry with (exception, retry_number)
+        """
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+        self.backoff_factor = backoff_factor
+        self.jitter = jitter
+        self.retryable_exceptions = retryable_exceptions
+        self.on_retry = on_retry
+    
+    def __call__(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            retry_count = 0
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except self.retryable_exceptions as e:
+                    retry_count += 1
+                    if retry_count > self.max_retries:
+                        # Max retries exceeded, re-raise the exception
+                        raise
+                    
+                    # Calculate delay with exponential backoff
+                    delay = self.base_delay * (self.backoff_factor ** (retry_count - 1))
+                    
+                    # Add jitter if enabled
+                    if self.jitter:
+                        delay *= random.uniform(0.5, 1.5)
+                    
+                    # Call the on_retry callback if provided
+                    if self.on_retry:
+                        self.on_retry(e, retry_count)
+                    
+                    # Wait before retrying
+                    time.sleep(delay)
+                except Exception:
+                    # Non-retryable exception, raise immediately
+                    raise
+        
+        return wrapper 

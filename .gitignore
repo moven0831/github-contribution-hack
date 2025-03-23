@@ -4,3 +4,17 @@ __pycache__/
 .env
 repos/
 contributions.db
+
+# Test artifacts
+.pytest_cache/
+coverage_html/
+.coverage
+htmlcov/
+pytest-report.xml
+.hypothesis/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~

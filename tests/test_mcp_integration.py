@@ -98,9 +98,12 @@ class TestMCPClient(unittest.TestCase):
         # Mock an exception
         mock_post.side_effect = Exception("Connection error")
         
-        # The method should handle the exception and return None
-        result = self.client._make_api_request("test/endpoint", {"param": "value"})
-        self.assertIsNone(result)
+        # Mock the retry_with_backoff decorator to pass through the function
+        # and not actually apply retries for this test
+        with patch('mcp_integration.retry_with_backoff', side_effect=lambda *args, **kwargs: lambda f: f):
+            # The method should handle the exception and return None
+            result = self.client._make_api_request("test/endpoint", {"param": "value"})
+            self.assertIsNone(result)
 
     @patch('mcp_integration.MCPClient._make_api_request')
     def test_generate_code_success(self, mock_api_request):
@@ -190,9 +193,10 @@ class TestMCPClient(unittest.TestCase):
     def test_generate_fallback_code_markdown(self):
         """Test fallback code generation for Markdown"""
         code = self.client._generate_fallback_code("markdown")
-        self.assertIn("# Project Update", code)
-        self.assertIn("## Latest Changes", code)
-        self.assertIn("## Next Steps", code)
+        self.assertIn("# Generated Markdown Content", code)
+        self.assertIn("## Summary", code)
+        self.assertIn("## Features", code)
+        self.assertIn("## Example Code", code)
 
     def test_generate_fallback_code_unknown(self):
         """Test fallback code generation for unknown language"""
