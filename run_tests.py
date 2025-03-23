@@ -42,62 +42,37 @@ def run_tests_with_coverage(
     cov = coverage.Coverage(
         source=source_files,
         omit=['*/__pycache__/*', '*/tests/*', '*/venv/*'],
+        include=['*.py'],  # Include all Python files
+        data_file='.coverage'
     )
     cov.start()
 
     start_time = time.time()
     
-    # Discover and run tests
-    test_loader = unittest.TestLoader()
-    test_suite = test_loader.discover(test_dir, pattern=pattern)
+    # For proper coverage collection, use pytest for test running
+    import pytest
     
+    # Build pytest arguments
+    pytest_args = ['-v', test_dir]
+    
+    # If parallel is enabled, add xdist arguments for parallelization
     if parallel and sys.platform != 'win32':  # Parallel execution not well supported on Windows
-        cpu_count = multiprocessing.cpu_count()
-        worker_count = max(2, cpu_count - 1)  # Leave one CPU free
-        runner = unittest.TextTestRunner(verbosity=2)
-        
-        print(f"Running tests in parallel using {worker_count} workers...\n")
-        
-        # Use concurrent.futures for parallel test execution
-        import concurrent.futures
-        
-        # Split the test suite into individual test cases
-        test_cases = []
-        for suite in test_suite:
-            for test_case in suite:
-                test_cases.append(test_case)
-        
-        # Run tests in parallel
-        with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
-            futures = [executor.submit(runner.run, [test_case]) for test_case in test_cases]
-            results = [future.result() for future in concurrent.futures.as_completed(futures)]
-        
-        # Aggregate results
-        failures = []
-        errors = []
-        tests_run = 0
-        skipped = []
-        
-        for result in results:
-            failures.extend(result.failures)
-            errors.extend(result.errors)
-            tests_run += result.testsRun
-            if hasattr(result, 'skipped'):
-                skipped.extend(result.skipped)
-        
-        # Create a mock TestResult object to return
-        mock_result = unittest.TestResult()
-        mock_result.failures = failures
-        mock_result.errors = errors
-        mock_result.testsRun = tests_run
-        if hasattr(mock_result, 'skipped'):
-            mock_result.skipped = skipped
-        
-        result = mock_result
-    else:
-        # Run tests sequentially
-        runner = unittest.TextTestRunner(verbosity=2)
-        result = runner.run(test_suite)
+        try:
+            import pytest_xdist
+            cpu_count = multiprocessing.cpu_count()
+            worker_count = max(2, cpu_count - 1)  # Leave one CPU free
+            pytest_args.extend(['-xvs', f'-n={worker_count}'])
+            print(f"Running tests in parallel using {worker_count} workers...\n")
+        except ImportError:
+            print("pytest-xdist not installed, running tests sequentially")
+    
+    # Capture the output of pytest in a result variable
+    exit_code = pytest.main(pytest_args)
+    
+    # Create a mock TestResult to maintain compatibility
+    result = unittest.TestResult()
+    result.wasSuccessful = lambda: exit_code == 0
+    result.testsRun = -1  # We don't know the exact count
     
     elapsed_time = time.time() - start_time
     
@@ -107,20 +82,20 @@ def run_tests_with_coverage(
     
     if show_report:
         print(f'\nTest Run Completed in {elapsed_time:.2f} seconds')
-        print(f'Tests Run: {result.testsRun}')
-        print(f'Errors: {len(result.errors)}')
-        print(f'Failures: {len(result.failures)}')
-        if hasattr(result, 'skipped'):
-            print(f'Skipped: {len(result.skipped)}')
-        
-        print('\nCoverage Summary:')
-        cov.report()
+        try:
+            print('\nCoverage Summary:')
+            cov.report()
+        except Exception as e:
+            print(f"Error generating coverage report: {e}")
     
     # Generate HTML report
     if generate_html:
-        html_dir = 'coverage_html'
-        cov.html_report(directory=html_dir)
-        print(f"\nHTML coverage report generated in {os.path.abspath(html_dir)}")
+        try:
+            html_dir = 'coverage_html'
+            cov.html_report(directory=html_dir)
+            print(f"\nHTML coverage report generated in {os.path.abspath(html_dir)}")
+        except Exception as e:
+            print(f"Error generating HTML coverage report: {e}")
     
     return result
 
