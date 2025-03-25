@@ -9,6 +9,7 @@ import random
 import logging
 import functools
 from typing import Callable, Any, Optional, Type, List, Union, Tuple
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ def retry_with_backoff(
     max_backoff: float = 60.0,
     initial_wait: float = 1.0,
     jitter: bool = True,
+    jitter_factor: float = 0.1,
     exceptions: Union[Type[Exception], Tuple[Type[Exception], ...]] = Exception
 ) -> Callable:
     """
@@ -29,6 +31,7 @@ def retry_with_backoff(
         max_backoff: Maximum wait time between retries
         initial_wait: Initial wait time
         jitter: Add random jitter to wait time
+        jitter_factor: Factor to determine jitter range (0.0-1.0)
         exceptions: Exception types to catch and retry
         
     Returns:
@@ -40,6 +43,12 @@ def retry_with_backoff(
             last_exception = None
             wait_time = initial_wait
             
+            # Pre-calculate backoff times to avoid repeated computation
+            backoff_times = [
+                min(max_backoff, initial_wait * (backoff_factor ** i))
+                for i in range(retries)
+            ]
+            
             for attempt in range(1, retries + 2):  # +1 for initial attempt
                 try:
                     return func(*args, **kwargs)
@@ -50,11 +59,15 @@ def retry_with_backoff(
                         logger.error(f"Failed after {retries} retries: {str(e)}")
                         raise
                     
-                    # Calculate next wait time with exponential backoff
+                    # Get pre-calculated backoff time
+                    wait_time = backoff_times[attempt - 1]
+                    
+                    # Apply full jitter algorithm if jitter is enabled
+                    # This distributes load better for multiple concurrent clients
                     if jitter:
-                        sleep_time = min(max_backoff, wait_time * (1 + random.random() * 0.1))
+                        sleep_time = random.uniform(0, min(max_backoff, wait_time * (1 + jitter_factor)))
                     else:
-                        sleep_time = min(max_backoff, wait_time)
+                        sleep_time = wait_time
                     
                     logger.warning(
                         f"Attempt {attempt}/{retries + 1} failed: {str(e)}. "
@@ -62,7 +75,6 @@ def retry_with_backoff(
                     )
                     
                     time.sleep(sleep_time)
-                    wait_time = wait_time * backoff_factor
             
             # Should never reach here, but just in case
             if last_exception:
@@ -74,6 +86,9 @@ def retry_with_backoff(
 
 class RetryableHTTP:
     """Helper class for retryable HTTP operations"""
+    
+    # Cache of retryable status codes for faster lookups
+    _RETRYABLE_STATUS_CODES = frozenset([429, 500, 502, 503, 504])
     
     @staticmethod
     def is_retryable_error(status_code: Optional[int]) -> bool:
@@ -89,9 +104,8 @@ class RetryableHTTP:
         if status_code is None:
             return True  # Network errors (no status code)
         
-        # 429 Too Many Requests
-        # 500, 502, 503, 504 Server errors
-        return status_code in (429, 500, 502, 503, 504)
+        # Use cached set for O(1) lookup instead of linear search
+        return status_code in RetryableHTTP._RETRYABLE_STATUS_CODES
     
     @staticmethod
     def calculate_retry_after(

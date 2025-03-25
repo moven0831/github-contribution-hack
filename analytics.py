@@ -2,16 +2,36 @@ class ContributionAnalytics:
     def __init__(self):
         self._init_database()
         self._setup_visualization()
+        # Add cache for analytics data
+        self._cache = {}
+        self._cache_expiry = {}
+        self._cache_ttl = 300  # 5 minutes cache TTL
         
     def _init_database(self):
         """Initialize SQLite database for tracking"""
         import sqlite3
-        self.conn = sqlite3.connect('contributions.db')
+        import time
+        from datetime import datetime
+        
+        # Use connection timeout and optimize for performance
+        self.conn = sqlite3.connect('contributions.db', timeout=30)
+        
+        # Optimize SQLite settings for better performance
+        self.conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging
+        self.conn.execute("PRAGMA synchronous=NORMAL")  # Reduce disk I/O
+        self.conn.execute("PRAGMA cache_size=10000")  # Increase cache size
+        self.conn.execute("PRAGMA temp_store=MEMORY")  # Store temp tables in memory
+        
         self.cursor = self.conn.cursor()
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS contributions
                              (timestamp DATETIME, repo TEXT, 
                              commit_count INTEGER, lines_changed INTEGER,
                              file_type TEXT)''')
+        
+        # Create an index for faster querying by timestamp
+        self.cursor.execute('''CREATE INDEX IF NOT EXISTS timestamp_idx 
+                            ON contributions(timestamp)''')
+        self.conn.commit()
 
     def _setup_visualization(self):
         """Setup visualization components"""
@@ -26,28 +46,65 @@ class ContributionAnalytics:
 
     def log_contribution(self, repo, commit_count, lines_changed, file_type):
         """Log contribution details to database"""
+        from datetime import datetime
+        
+        # Clear cache when new data is added
+        self._cache = {}
+        
+        timestamp = datetime.now().isoformat()
         self.cursor.execute('''INSERT INTO contributions VALUES 
-                            (datetime('now'), ?, ?, ?, ?)''',
-                            (repo, commit_count, lines_changed, file_type))
+                            (?, ?, ?, ?, ?)''',
+                            (timestamp, repo, commit_count, lines_changed, file_type))
         self.conn.commit()
 
     def generate_report(self):
         """Generate analytics report"""
+        # Check cache first
+        if 'report' in self._cache:
+            from datetime import datetime
+            import time
+            
+            now = time.time()
+            if now - self._cache_expiry.get('report', 0) < self._cache_ttl:
+                return self._cache['report']
+                
         report = {
             'current_streak': self._calculate_streak(),
             'daily_average': self._daily_average(),
             'success_probability': self._success_probability(),
             'repo_activity': self._repo_activity_distribution()
         }
+        
+        # Store in cache
+        import time
+        self._cache['report'] = report
+        self._cache_expiry['report'] = time.time()
+        
         self._display_dashboard(report)
         return report
 
     def _calculate_streak(self):
         """Calculate current contribution streak"""
+        # Check cache first
+        if 'streak' in self._cache:
+            import time
+            now = time.time()
+            if now - self._cache_expiry.get('streak', 0) < self._cache_ttl:
+                return self._cache['streak']
+        
+        from datetime import datetime
+        
         self.cursor.execute('''SELECT DISTINCT DATE(timestamp) 
                             FROM contributions ORDER BY timestamp DESC''')
         dates = [datetime.strptime(row[0], '%Y-%m-%d') for row in self.cursor.fetchall()]
-        return self._consecutive_days(dates)
+        streak = self._consecutive_days(dates)
+        
+        # Cache result
+        import time
+        self._cache['streak'] = streak
+        self._cache_expiry['streak'] = time.time()
+        
+        return streak
 
     def _success_probability(self):
         """Predict streak success probability using historical data"""
