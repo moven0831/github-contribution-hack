@@ -12,6 +12,10 @@ import threading
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union, Callable
+import queue
+import heapq
+from concurrent.futures import ThreadPoolExecutor
+import functools
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -29,7 +33,8 @@ class ServiceMonitor:
     def __init__(self, 
                  check_interval: int = 300,  # 5 minutes
                  history_size: int = 100,    # Keep last 100 checks
-                 alert_threshold: int = 3):  # Alert after 3 consecutive failures
+                 alert_threshold: int = 3,   # Alert after 3 consecutive failures
+                 max_workers: int = 5):      # Maximum number of worker threads
         """
         Initialize health monitor
         
@@ -37,12 +42,15 @@ class ServiceMonitor:
             check_interval: Interval between checks in seconds
             history_size: Number of check results to keep in history
             alert_threshold: Number of consecutive failures before alerting
+            max_workers: Maximum number of workers for parallel health checks
         """
         self.check_interval = check_interval
         self.history_size = history_size
         self.alert_threshold = alert_threshold
+        self.max_workers = max_workers
         
-        # Service status history
+        # Service status history with fixed size (using deque is more efficient)
+        from collections import deque
         self.service_history = {}
         
         # Registered health check functions
@@ -57,6 +65,16 @@ class ServiceMonitor:
         # Monitor thread
         self.monitor_thread = None
         self.should_stop = threading.Event()
+        
+        # Task queue for scheduled checks
+        self.task_queue = queue.PriorityQueue()
+        
+        # Thread pool for parallel execution
+        self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
+        
+        # Cache for health check results
+        self.result_cache = {}
+        self.cache_ttl = 60  # Cache results for 60 seconds
         
         # Register default health checks
         self._register_default_checks()
@@ -233,38 +251,65 @@ class ServiceMonitor:
     
     def run_health_checks(self) -> Dict[str, Dict]:
         """
-        Run all registered health checks
+        Run all registered health checks in parallel
         
         Returns:
-            Dictionary of service health results
+            Dictionary of health check results by service ID
         """
         results = {}
+        futures = {}
         
+        # Submit all health checks to the thread pool
         with self.lock:
             for service_id, check_info in self.health_checks.items():
-                try:
-                    result = check_info["func"]()
-                    
-                    # Add result to history
+                # Check if we have a valid cached result
+                current_time = time.time()
+                if service_id in self.result_cache:
+                    cached_time, cached_result = self.result_cache[service_id]
+                    if current_time - cached_time < self.cache_ttl:
+                        results[service_id] = cached_result
+                        continue
+                
+                # Submit the check to the executor
+                future = self.executor.submit(check_info["func"])
+                futures[future] = service_id
+        
+        # Process the results as they complete
+        for future in futures:
+            service_id = futures[future]
+            try:
+                result = future.result(timeout=10)  # 10 seconds timeout
+                
+                # Update the history
+                with self.lock:
+                    if service_id not in self.service_history:
+                        from collections import deque
+                        self.service_history[service_id] = deque(maxlen=self.history_size)
                     self.service_history[service_id].append(result)
                     
-                    # Truncate history if needed
-                    if len(self.service_history[service_id]) > self.history_size:
-                        self.service_history[service_id] = self.service_history[service_id][-self.history_size:]
-                    
-                    # Check for alert condition
-                    self._check_alert_condition(service_id, check_info["display_name"], result)
-                    
-                    results[service_id] = result
-                except Exception as e:
-                    logger.error(f"Error running health check for {service_id}: {str(e)}")
-                    error_result = {
-                        "status": HealthStatus.ERROR,
-                        "message": f"Health check error: {str(e)}",
-                        "timestamp": datetime.now().isoformat()
-                    }
+                    # Cache the result
+                    self.result_cache[service_id] = (time.time(), result)
+                
+                results[service_id] = result
+                
+                # Check for alert conditions
+                display_name = self.health_checks[service_id]["display_name"]
+                self._check_alert_condition(service_id, display_name, result)
+                
+            except Exception as e:
+                logger.error(f"Error running health check for {service_id}: {str(e)}")
+                error_result = {
+                    "status": HealthStatus.ERROR,
+                    "message": f"Health check error: {str(e)}",
+                    "timestamp": datetime.now().isoformat()
+                }
+                results[service_id] = error_result
+                
+                with self.lock:
+                    if service_id not in self.service_history:
+                        from collections import deque
+                        self.service_history[service_id] = deque(maxlen=self.history_size)
                     self.service_history[service_id].append(error_result)
-                    results[service_id] = error_result
         
         return results
     
@@ -319,40 +364,56 @@ class ServiceMonitor:
                 logger.error(f"Error in alert handler: {str(e)}")
     
     def start_monitoring(self):
-        """Start background monitoring thread"""
+        """Start the health monitoring thread"""
         if self.monitor_thread and self.monitor_thread.is_alive():
-            logger.warning("Monitoring already running")
+            logger.warning("Monitoring thread is already running")
             return
         
         self.should_stop.clear()
-        self.monitor_thread = threading.Thread(
-            target=self._monitoring_loop,
-            name="health-monitor",
-            daemon=True
-        )
+        self.monitor_thread = threading.Thread(target=self._monitoring_loop)
+        self.monitor_thread.daemon = True
         self.monitor_thread.start()
         logger.info("Health monitoring started")
     
     def stop_monitoring(self):
-        """Stop background monitoring thread"""
-        if not self.monitor_thread:
-            logger.warning("Monitoring not running")
-            return
-        
-        self.should_stop.set()
-        self.monitor_thread.join(timeout=5.0)
-        logger.info("Health monitoring stopped")
+        """Stop the health monitoring thread"""
+        if self.monitor_thread and self.monitor_thread.is_alive():
+            logger.info("Stopping health monitoring")
+            self.should_stop.set()
+            self.monitor_thread.join(timeout=5)
+            if self.monitor_thread.is_alive():
+                logger.warning("Monitoring thread did not stop cleanly")
+            self.monitor_thread = None
+            
+        # Shutdown the executor
+        self.executor.shutdown(wait=False)
     
     def _monitoring_loop(self):
-        """Background monitoring loop"""
+        """Main monitoring loop that runs in a separate thread"""
+        logger.info("Monitoring loop started")
+        
+        # Run initial health checks immediately
+        self.run_health_checks()
+        
+        next_run = time.time() + self.check_interval
+        
         while not self.should_stop.is_set():
+            # Sleep until next check time or stop signal
+            current_time = time.time()
+            if current_time < next_run:
+                # Use Event.wait with timeout instead of time.sleep for more responsive shutdown
+                if self.should_stop.wait(min(1.0, next_run - current_time)):
+                    break
+                continue
+                
+            # Run health checks
             try:
                 self.run_health_checks()
             except Exception as e:
                 logger.error(f"Error in monitoring loop: {str(e)}")
             
-            # Wait for next check interval
-            self.should_stop.wait(self.check_interval)
+            # Schedule next run
+            next_run = time.time() + self.check_interval
     
     def get_service_status(self, service_id: str) -> Dict:
         """
