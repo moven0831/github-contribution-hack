@@ -10,6 +10,13 @@ from dotenv import load_dotenv
 import json
 from analytics import ContributionAnalytics
 from mcp_integration import MCPClient, get_mcp_client
+import concurrent.futures
+import functools
+import tempfile
+from pathlib import Path
+
+# Add LRU cache for efficient function calls
+from functools import lru_cache
 
 class GitHubContributionHack:
     def __init__(self, config_path='config.yml'):
@@ -41,6 +48,14 @@ class GitHubContributionHack:
         # Interval settings (in hours)
         self.min_interval = self.config.get('min_interval', 12)
         self.max_interval = self.config.get('max_interval', 24)
+        
+        # Configure performance settings
+        self.max_workers = self.config.get('performance', {}).get('max_workers', 4)
+        self.parallel_repos = self.config.get('performance', {}).get('parallel_repos', True)
+        
+        # Use a local shared repo cache to avoid repeated cloning
+        self.repo_cache_dir = Path(tempfile.gettempdir()) / 'github_contrib_cache'
+        os.makedirs(self.repo_cache_dir, exist_ok=True)
         
         self.commit_pattern_model = self._load_commit_pattern_model()
         self.file_types = ['txt', 'md', 'py', 'js', 'json']
@@ -205,56 +220,111 @@ class GitHubContributionHack:
             # Fall back to basic content generation
             return self._basic_content_generation()
 
+    @lru_cache(maxsize=32)
+    def _get_cached_repo_info(self, repo_name):
+        """Get cached repository information"""
+        return self.g.get_repo(repo_name)
+
     def make_contributions(self):
         """
         Make automated contributions to selected repositories
         """
-        for repo_name in self.repositories:
-            try:
-                # Clone or update repository
-                repo = self.g.get_repo(repo_name)
-                repo_url = f"https://{self.github_token}@github.com/{repo_name}.git"
+        if self.parallel_repos and len(self.repositories) > 1:
+            # Use parallel processing for multiple repositories
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                # Submit all repo tasks to the executor
+                futures = {
+                    executor.submit(self._process_single_repo, repo_name): repo_name 
+                    for repo_name in self.repositories
+                }
                 
-                # Create local directory if not exists
-                local_path = os.path.join('repos', repo_name.replace('/', '_'))
-                os.makedirs(local_path, exist_ok=True)
-                
-                # Clone or pull repository
-                if not os.path.exists(os.path.join(local_path, '.git')):
-                    git.Repo.clone_from(repo_url, local_path)
-                else:
+                # Process results as they complete
+                for future in concurrent.futures.as_completed(futures):
+                    repo_name = futures[future]
+                    try:
+                        result = future.result()
+                        print(f"Successfully processed repository: {repo_name}")
+                    except Exception as e:
+                        print(f"Error processing repository {repo_name}: {str(e)}")
+        else:
+            # Process repositories sequentially
+            for repo_name in self.repositories:
+                try:
+                    self._process_single_repo(repo_name)
+                    print(f"Successfully processed repository: {repo_name}")
+                except Exception as e:
+                    print(f"Error processing repository {repo_name}: {str(e)}")
+    
+    def _process_single_repo(self, repo_name):
+        """Process a single repository for contributions"""
+        try:
+            # Get repo info (uses LRU cache)
+            repo = self._get_cached_repo_info(repo_name)
+            repo_url = f"https://{self.github_token}@github.com/{repo_name}.git"
+            
+            # Create local directory if not exists
+            local_path = os.path.join('repos', repo_name.replace('/', '_'))
+            os.makedirs(local_path, exist_ok=True)
+            
+            # Use the cached clone if available, otherwise clone new
+            cache_key = repo_name.replace('/', '_')
+            cache_path = self.repo_cache_dir / cache_key
+            
+            if not os.path.exists(os.path.join(local_path, '.git')):
+                if cache_path.exists() and (cache_path / '.git').exists():
+                    # Copy from cache instead of clone
+                    import shutil
+                    shutil.copytree(cache_path, local_path, dirs_exist_ok=True)
                     repo_obj = git.Repo(local_path)
                     repo_obj.remotes.origin.pull()
-                
-                # Make random number of commits
-                num_commits = random.randint(self.min_commits, self.max_commits)
-                commits_made = []
-                total_lines = 0
-                file_ext = None
-                for _ in range(num_commits):
-                    commit_message, content = self.generate_random_content()
-                    commits_made.append(commit_message)
-                    total_lines += len(content.splitlines())
-                    if file_ext is None:
-                        file_ext = content.split('.')[-1]
-                    self._make_single_commit(local_path, commit_message, content)
-                
-                print(f"Contributions made to {repo_name}")
-                
-                self.analytics.log_contribution(
-                    repo_name, 
-                    commit_count=len(commits_made),
-                    lines_changed=total_lines,
-                    file_type=file_ext
-                )
-                
-                # Verify with GitHub API
-                if self.config.get('verification', {}).get('enabled', True):
-                    self._verify_github_activity(repo_name, commits_made)
+                else:
+                    # Clone and cache
+                    repo_obj = git.Repo.clone_from(repo_url, local_path)
+                    # Cache this clone for future use if not already cached
+                    if not cache_path.exists():
+                        shutil.copytree(local_path, cache_path, dirs_exist_ok=True)
+            else:
+                # Just pull latest changes
+                repo_obj = git.Repo(local_path)
+                repo_obj.remotes.origin.pull()
             
-            except Exception as e:
-                print(f"Error contributing to {repo_name}: {e}")
-    
+            # Make random number of commits
+            num_commits = random.randint(self.min_commits, self.max_commits)
+            commits_made = []
+            total_lines = 0
+            file_ext = None
+            
+            # Pre-generate all content to avoid API rate limits during commit loop
+            commit_contents = []
+            for _ in range(num_commits):
+                commit_message, content = self.generate_random_content()
+                commit_contents.append((commit_message, content))
+            
+            # Process all commits
+            for commit_message, content in commit_contents:
+                commits_made.append(commit_message)
+                total_lines += len(content.splitlines())
+                if file_ext is None:
+                    file_ext = content.split('.')[-1] if '.' in content else 'txt'
+                self._make_single_commit(local_path, commit_message, content)
+            
+            self.analytics.log_contribution(
+                repo_name, 
+                commit_count=len(commits_made),
+                lines_changed=total_lines,
+                file_type=file_ext
+            )
+            
+            return {
+                'commits': len(commits_made),
+                'lines': total_lines,
+                'file_type': file_ext
+            }
+            
+        except Exception as e:
+            print(f"Error processing repository {repo_name}: {str(e)}")
+            raise
+
     def _make_single_commit(self, repo_path, commit_message, content):
         """
         Make a single commit to the repository
