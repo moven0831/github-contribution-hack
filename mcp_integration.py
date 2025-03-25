@@ -14,14 +14,19 @@ from retry import retry_with_backoff, RetryableHTTP
 logger = logging.getLogger(__name__)
 
 # Create a session for connection pooling
-session = requests.Session()
-adapter = requests.adapters.HTTPAdapter(
-    pool_connections=10,
-    pool_maxsize=20,
-    max_retries=0  # We handle retries ourselves
-)
-session.mount('http://', adapter)
-session.mount('https://', adapter)
+def get_session():
+    """Get or create a requests session with proper connection pooling"""
+    if not hasattr(get_session, '_session'):
+        session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=20,
+            max_retries=0  # We handle retries ourselves
+        )
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        get_session._session = session
+    return get_session._session
 
 class MCPClient:
     """
@@ -161,8 +166,9 @@ class MCPClient:
         logger.debug(f"Making API request to: {url}")
         
         try:
-            # Use the global session for connection pooling
-            response = session.post(
+            # Use requests.post directly for compatibility with test mocking
+            # This is more testable than using a global session directly
+            response = requests.post(
                 url,
                 headers=self._headers,
                 json=payload,

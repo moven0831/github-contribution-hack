@@ -9,7 +9,7 @@ import github
 from dotenv import load_dotenv
 import json
 from analytics import ContributionAnalytics
-from mcp_integration import MCPClient, get_mcp_client
+from mcp_integration import MCPClient, get_mcp_client, get_session
 import concurrent.futures
 import functools
 import tempfile
@@ -35,6 +35,9 @@ class GitHubContributionHack:
         self._validate_environment()
         self._setup_secure_credentials()
         self._configure_repository_access()
+        
+        # Initialize HTTP session for better performance
+        self.session = get_session()
         
         # Get repositories to contribute to
         self.repositories = self.config.get('repositories', [])

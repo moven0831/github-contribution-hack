@@ -71,7 +71,7 @@ class TestMCPClient(unittest.TestCase):
                 "Content-Type": "application/json"
             },
             json={"param": "value"},
-            timeout=30
+            timeout=15
         )
         
         # Verify the result
