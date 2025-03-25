@@ -13,6 +13,16 @@ from retry import retry_with_backoff, RetryableHTTP
 # Configure logger
 logger = logging.getLogger(__name__)
 
+# Create a session for connection pooling
+session = requests.Session()
+adapter = requests.adapters.HTTPAdapter(
+    pool_connections=10,
+    pool_maxsize=20,
+    max_retries=0  # We handle retries ourselves
+)
+session.mount('http://', adapter)
+session.mount('https://', adapter)
+
 class MCPClient:
     """
     Client for Mission Control Protocol (MCP) API integration
@@ -20,7 +30,7 @@ class MCPClient:
     """
     
     def __init__(self, api_key: str = None, api_endpoint: str = None, 
-                max_retries: int = 3, request_timeout: int = 30):
+                max_retries: int = 3, request_timeout: int = 15):
         """
         Initialize the MCP client
         
@@ -37,6 +47,12 @@ class MCPClient:
         if not self.api_key:
             logger.error("MCP API key not provided")
             raise ValueError("MCP API key not provided. Set MCP_API_KEY environment variable or pass directly.")
+        
+        # Cache commonly used data
+        self._headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
         
         logger.info(f"MCP client initialized with endpoint: {self.api_endpoint}")
     
@@ -132,7 +148,7 @@ class MCPClient:
             logger.error(f"MCP repository analysis failed: {str(e)}", exc_info=True)
             return {}
     
-    @retry_with_backoff(retries=3, exceptions=(requests.RequestException, ConnectionError, TimeoutError))
+    @retry_with_backoff(retries=3, exceptions=(requests.RequestException, ConnectionError, TimeoutError), backoff_factor=2.0)
     def _make_api_request(self, endpoint: str, payload: Dict) -> Dict:
         """
         Make an API request to MCP with retry capability
@@ -141,18 +157,14 @@ class MCPClient:
         :param payload: Request payload
         :return: Response data
         """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
         url = f"{self.api_endpoint}/{endpoint}"
         logger.debug(f"Making API request to: {url}")
         
         try:
-            response = requests.post(
+            # Use the global session for connection pooling
+            response = session.post(
                 url,
-                headers=headers,
+                headers=self._headers,
                 json=payload,
                 timeout=self.request_timeout
             )
