@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - GitHub Contribution Hack{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Dashboard</h1>
+        <div class="card mb-4">
+            <div class="card-header">
+                System Status
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card text-white bg-success mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Status</h5>
+                                <p class="card-text" id="system-status">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Uptime</h5>
+                                <p class="card-text" id="system-uptime">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Total Contributions</h5>
+                                <p class="card-text" id="total-contributions">Loading...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                Contribution Heatmap
+            </div>
+            <div class="card-body">
+                <img id="heatmap-img" src="" alt="Contribution Heatmap" class="img-fluid">
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                Streak Analysis
+            </div>
+            <div class="card-body">
+                <img id="streak-img" src="" alt="Streak Analysis" class="img-fluid">
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                Activity Timeline
+            </div>
+            <div class="card-body">
+                <img id="timeline-img" src="" alt="Activity Timeline" class="img-fluid">
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                Repository Distribution
+            </div>
+            <div class="card-body">
+                <img id="repo-img" src="" alt="Repository Distribution" class="img-fluid">
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                Recent Notifications
+            </div>
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Title</th>
+                            <th>Level</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-notifications">
+                        <tr>
+                            <td colspan="4" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load system stats
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('system-status').textContent = data.status || 'Unknown';
+            document.getElementById('system-uptime').textContent = data.uptime || 'Unknown';
+            document.getElementById('total-contributions').textContent = data.total_contributions || '0';
+        });
+    
+    // Load visualizations
+    ['heatmap', 'streak', 'timeline', 'repo'].forEach(vizType => {
+        fetch(`/api/vizualization/${vizType}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success' && data.image) {
+                    document.getElementById(`${vizType}-img`).src = `data:${data.mime_type};base64,${data.image}`;
+                }
+            });
+    });
+    
+    // Load notifications
+    fetch('/api/notifications')
+        .then(response => response.json())
+        .then(data => {
+            const tableBody = document.getElementById('recent-notifications');
+            tableBody.innerHTML = '';
+            
+            if (data.status === 'success' && data.notifications && data.notifications.length > 0) {
+                data.notifications.forEach(notification => {
+                    const row = document.createElement('tr');
+                    
+                    // Format timestamp
+                    const timestamp = new Date(notification.timestamp);
+                    const formattedTime = timestamp.toLocaleString();
+                    
+                    // Set level class
+                    let levelClass = '';
+                    if (notification.level === 'error') {
+                        levelClass = 'text-danger';
+                    } else if (notification.level === 'warning') {
+                        levelClass = 'text-warning';
+                    } else if (notification.level === 'info') {
+                        levelClass = 'text-info';
+                    }
+                    
+                    row.innerHTML = `
+                        <td>${formattedTime}</td>
+                        <td>${notification.title}</td>
+                        <td class="${levelClass}">${notification.level.toUpperCase()}</td>
+                        <td>${notification.message}</td>
+                    `;
+                    
+                    tableBody.appendChild(row);
+                });
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="4" class="text-center">No notifications available</td></tr>';
+            }
+        });
+});
+</script>
+{% endblock %}
