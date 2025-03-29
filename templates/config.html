@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration - GitHub Contribution Hack{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Configuration</h1>
+        <div class="card mb-4">
+            <div class="card-header">
+                Configuration Options
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    <a href="/config/repositories" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">Repositories</h5>
+                        </div>
+                        <p class="mb-1">Configure repositories for contributions</p>
+                    </a>
+                    <a href="/config/notifications" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">Notifications</h5>
+                        </div>
+                        <p class="mb-1">Configure notification channels and settings</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                Test Notifications
+            </div>
+            <div class="card-body">
+                <form id="test-notification-form">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="notification-channel" class="form-label">Channel</label>
+                            <select class="form-select" id="notification-channel" name="channel">
+                                <option value="">All Channels</option>
+                                <option value="email">Email</option>
+                                <option value="webhook">Webhook</option>
+                                <option value="desktop">Desktop</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="notification-level" class="form-label">Level</label>
+                            <select class="form-select" id="notification-level" name="level">
+                                <option value="info">Info</option>
+                                <option value="warning">Warning</option>
+                                <option value="error">Error</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="submit" class="btn btn-primary d-block">Send Test Notification</button>
+                        </div>
+                    </div>
+                </form>
+                <div id="notification-result" class="alert d-none"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                Current Configuration
+            </div>
+            <div class="card-body">
+                <pre><code id="config-json">{{ config | tojson(indent=2) }}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Test notification
+    document.getElementById('test-notification-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const resultDiv = document.getElementById('notification-result');
+        
+        fetch('/actions/test-notification', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            resultDiv.classList.remove('d-none', 'alert-success', 'alert-danger');
+            
+            if (data.status === 'success') {
+                resultDiv.classList.add('alert-success');
+                resultDiv.textContent = 'Notification sent successfully!';
+            } else {
+                resultDiv.classList.add('alert-danger');
+                resultDiv.textContent = `Error: ${data.message}`;
+            }
+        })
+        .catch(error => {
+            resultDiv.classList.remove('d-none');
+            resultDiv.classList.add('alert-danger');
+            resultDiv.textContent = `Error: ${error.message}`;
+        });
+    });
+});
+</script>
+{% endblock %}

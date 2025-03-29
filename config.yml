@@ -44,13 +44,74 @@ mcp_integration:
   content_quality: "high"
   dry_run: false                           # Set to true to test MCP without making actual commits
 
+# Monitoring Settings
 monitoring:
   enabled: true
   dashboard_refresh: 300  # seconds
   verification_checks: true
   retention_period: 30  # days
 
+# Analytics Settings
 analytics:
   streak_warning_threshold: 3
   commit_validation: true
-  performance_metrics: true 
+  performance_metrics: true
+
+# User Interface Settings
+ui:
+  web_interface:
+    enabled: true
+    host: "127.0.0.1"
+    port: 5000
+    auto_refresh: true
+    dashboard_theme: "light"  # light, dark
+  
+  cli_interface:
+    enabled: true
+    color_scheme: "default"   # default, monochrome, vibrant
+    refresh_rate: 2           # seconds
+    compact_mode: false
+
+# Visualization Settings
+visualization:
+  heatmap:
+    days: 365
+    color_scheme: "github"    # github, custom
+  streak_chart:
+    include_predictions: true
+  activity_timeline:
+    days: 90
+    include_average: true
+  repo_distribution:
+    limit_repos: 10
+
+# Notification Settings
+notifications:
+  enabled: true
+  email:
+    enabled: false
+    smtp_server: "smtp.example.com"
+    smtp_port: 587
+    username: "your_username"
+    password: "your_password"
+    sender: "sender@example.com"
+    recipients:
+      - "recipient@example.com"
+  
+  webhook:
+    enabled: false
+    url: "https://example.com/webhook"
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer your_token_here"
+  
+  desktop:
+    enabled: true
+  
+  throttle_rules:
+    - pattern: "Warning"
+      max_count: 5
+      time_window: 3600  # seconds
+    - pattern: "Info"
+      max_count: 10
+      time_window: 1800  # seconds 

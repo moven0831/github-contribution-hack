@@ -12,6 +12,7 @@ This project aims to create a program that automatically makes contributions to 
 - **Real-Time Monitoring**: Interactive dashboard with streak analytics and verification
 - **MCP Integration**: AI-powered code and commit generation for more realistic contributions
 - Cross-platform compatibility (Windows, macOS, Linux)
+- **Enhanced User Experience**: Interactive CLI, web interface, visualizations, and notifications
 
 ## Getting Started
 
@@ -61,6 +62,85 @@ For enhanced AI-powered code and commit generation:
    ```
 
 For full MCP integration documentation, see [MCP_INTEGRATION.md](MCP_INTEGRATION.md).
+
+### User Experience Features
+
+#### Interactive CLI
+
+Start the interactive command-line interface:
+```bash
+python main.py --interactive
+```
+
+The CLI provides:
+- Real-time status updates
+- Progress indicators for contribution processes
+- Service health monitoring
+- Contribution analytics dashboard
+
+#### Web Interface
+
+Start the web-based dashboard:
+```bash
+python main.py --web
+# Optionally specify host and port
+python main.py --web --host 0.0.0.0 --port 8080
+```
+
+Features of the web interface:
+- Dashboard with contribution statistics
+- Visualization of contribution patterns
+- Configuration management
+- Notification history and testing
+
+#### Visualization Tools
+
+Generate visualizations of your contribution patterns:
+```bash
+# Generate all visualizations
+python main.py --visualize all
+
+# Generate specific visualizations
+python main.py --visualize heatmap
+python main.py --visualize streak
+python main.py --visualize timeline
+python main.py --visualize repo
+```
+
+Available visualizations:
+- Contribution heatmap (GitHub-style calendar view)
+- Streak analysis (current and longest streaks)
+- Activity timeline (contributions over time)
+- Repository distribution (pie chart of activity by repository)
+
+#### Notification System
+
+Configure notifications in `config.yml`:
+```yaml
+notifications:
+  enabled: true
+  email:
+    enabled: true
+    smtp_server: smtp.example.com
+    smtp_port: 587
+    username: your_username
+    password: your_password
+    sender: sender@example.com
+    recipients:
+      - recipient1@example.com
+      - recipient2@example.com
+  webhook:
+    enabled: true
+    url: https://example.com/webhook
+  desktop:
+    enabled: true
+```
+
+The notification system supports:
+- Email notifications with HTML formatting
+- Webhook integration for services like Slack, Discord, etc.
+- Desktop notifications for immediate alerts
+- Throttling rules to prevent notification spam
 
 ### Monitoring Dashboard
 

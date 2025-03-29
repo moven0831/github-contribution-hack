@@ -14,6 +14,14 @@ import concurrent.futures
 import functools
 import tempfile
 from pathlib import Path
+import sys
+import argparse
+
+# Add the new modules
+from cli_interface import InteractiveCLI
+from visualization import ContributionVisualizer
+from notification_system import setup_notifications, NotificationManager
+from web_interface import WebInterface, setup_web_interface
 
 # Add LRU cache for efficient function calls
 from functools import lru_cache
@@ -65,6 +73,15 @@ class GitHubContributionHack:
         self.analytics = ContributionAnalytics()
         self._setup_github_verification()
         
+        # Initialize notification system
+        self.notification_manager = None
+        if self.config.get('notifications', {}).get('enabled', True):
+            try:
+                self.notification_manager = setup_notifications(self.config)
+                print("Notification system initialized successfully")
+            except Exception as e:
+                print(f"Failed to initialize notification system: {str(e)}")
+                
         # Initialize MCP client if MCP integration is enabled
         self.mcp_client = None
         if self.config.get('mcp_integration', {}).get('enabled', False):
@@ -232,6 +249,14 @@ class GitHubContributionHack:
         """
         Make automated contributions to selected repositories
         """
+        # Notify start of contribution process if notification system is enabled
+        if self.notification_manager:
+            self.notification_manager.notify(
+                "Starting Contribution Process",
+                f"Beginning contributions to {len(self.repositories)} repositories.",
+                "info"
+            )
+            
         if self.parallel_repos and len(self.repositories) > 1:
             # Use parallel processing for multiple repositories
             with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -419,8 +444,107 @@ class GitHubContributionHack:
             time.sleep(300)  # Update every 5 minutes
 
 def main():
-    hack = GitHubContributionHack()
-    hack._schedule_commits()
+    """
+    Main entry point for the application
+    """
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="GitHub Contribution Hack")
+    parser.add_argument('--config', default='config.yml', help='Path to configuration file')
+    parser.add_argument('--interactive', action='store_true', help='Start interactive CLI')
+    parser.add_argument('--web', action='store_true', help='Start web interface')
+    parser.add_argument('--port', type=int, default=5000, help='Port for web interface')
+    parser.add_argument('--host', default='127.0.0.1', help='Host for web interface')
+    parser.add_argument('--visualize', choices=['heatmap', 'streak', 'timeline', 'repo', 'all'], 
+                      help='Generate visualization and exit')
+    
+    args = parser.parse_args()
+    
+    # Initialize the core system
+    try:
+        hack = GitHubContributionHack(config_path=args.config)
+    except Exception as e:
+        print(f"Error initializing system: {str(e)}")
+        sys.exit(1)
+    
+    # Check if we need to generate visualization only
+    if args.visualize:
+        try:
+            visualizer = ContributionVisualizer()
+            
+            if args.visualize == 'heatmap' or args.visualize == 'all':
+                path = visualizer.generate_heatmap()
+                print(f"Generated heatmap: {path}")
+                
+            if args.visualize == 'streak' or args.visualize == 'all':
+                path = visualizer.generate_streak_chart()
+                print(f"Generated streak chart: {path}")
+                
+            if args.visualize == 'timeline' or args.visualize == 'all':
+                path = visualizer.generate_activity_timeline()
+                print(f"Generated timeline: {path}")
+                
+            if args.visualize == 'repo' or args.visualize == 'all':
+                path = visualizer.generate_repo_distribution()
+                print(f"Generated repository distribution: {path}")
+                
+            return
+        except Exception as e:
+            print(f"Error generating visualization: {str(e)}")
+            sys.exit(1)
+    
+    # Check if we should start the web interface
+    if args.web:
+        try:
+            # Set up the web interface
+            setup_web_interface()
+            
+            # Create and start the web interface
+            interface = WebInterface(
+                config_path=args.config,
+                host=args.host,
+                port=args.port
+            )
+            
+            # Start the web interface in a separate thread
+            interface.start(debug=False)
+            
+            print(f"Web interface started at http://{args.host}:{args.port}/")
+            
+            # If only web interface was requested, keep the main thread alive
+            if not args.interactive:
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    print("Shutting down web interface...")
+                    interface.stop()
+        except Exception as e:
+            print(f"Error starting web interface: {str(e)}")
+            sys.exit(1)
+    
+    # Check if we should start the interactive CLI
+    if args.interactive:
+        try:
+            # Create CLI instance with analytics and health monitor
+            cli = InteractiveCLI(
+                analytics=hack.analytics,
+                health_monitor=None  # TODO: Add health monitor integration
+            )
+            
+            # Start the CLI
+            cli.start()
+        except Exception as e:
+            print(f"Error starting interactive CLI: {str(e)}")
+            sys.exit(1)
+    
+    # If neither interactive nor web mode was specified, run in standard mode
+    if not args.interactive and not args.web:
+        try:
+            # Make contributions
+            hack.make_contributions()
+        except Exception as e:
+            print(f"Error during contribution process: {str(e)}")
+            sys.exit(1)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main() 
