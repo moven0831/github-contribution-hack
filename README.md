@@ -14,6 +14,19 @@ This project aims to create a program that automatically makes contributions to 
 - Cross-platform compatibility (Windows, macOS, Linux)
 - **Enhanced User Experience**: Interactive CLI, web interface, visualizations, and notifications
 
+## Documentation
+
+- [Installation Guide](docs/INSTALLATION.md) - Detailed setup instructions
+- [API Reference](docs/API_REFERENCE.md) - Complete API documentation
+- [Error Handling Guide](docs/ERROR_HANDLING.md) - Error handling documentation
+- [MCP Integration](MCP_INTEGRATION.md) - Guide for AI-powered content generation
+- [Demo Guide](DEMO.md) - Quick start demonstration
+- [Use Cases](docs/USE_CASES.md) - Comprehensive examples for various scenarios
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Solutions for common issues
+- [Sample Configurations](docs/SAMPLE_CONFIGURATIONS.md) - Ready-to-use configuration examples
+- [Best Practices](docs/BEST_PRACTICES.md) - Guidelines for responsible usage
+- [Contributing](CONTRIBUTING.md) - Guide for contributors
+
 ## Getting Started
 
 ### Prerequisites
@@ -248,43 +261,11 @@ To quickly see the GitHub Contribution Hack in action:
      cp .env.example .env
      ```
    - Replace `your_github_token_here` in `.env` with your actual token
-   - Optional: Add your MCP API key to the `.env` file for enhanced content generation
 
-4. Run the demo:
-   ```
-   python main.py
-   ```
+## Responsible Usage
 
-The demo will start generating automated commits to the preconfigured public demo repositories. Check the `contribution_graph.png` in the `DEMO.md` file to see an example of the generated activity.
+Please use this tool responsibly and ethically. See our [Best Practices](docs/BEST_PRACTICES.md) guide for guidelines on responsible usage.
 
-Note: The demo repositories are public and read-only. To use the tool with your own repositories, update the repository list in `config.yml`.
+## License
 
-### Installation
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/github-contribution-hack.git
-   cd github-contribution-hack  
-   ```
-
-2. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
-
-3. Set up your GitHub token:
-   - Generate a GitHub Personal Access Token with `repo` scope at https://github.com/settings/tokens
-   - Copy the `.env.example` file to `.env`:
-     ```
-     cp .env.example .env
-     ```
-   - Replace `your_github_token_here` in `.env` with your actual token
-
-4. Run the demo:
-   ```
-   python main.py
-   ```
-
-The demo will start generating automated commits to the preconfigured public demo repositories. Check the `contribution_graph.png` in the `DEMO.md` file to see an example of the generated activity.
-
-Note: The demo repositories are public and read-only. To use the tool with your own repositories, update the repository list in `config.yml`.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
