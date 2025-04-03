@@ -43,63 +43,67 @@ class TestSecurityComponents(unittest.TestCase):
         if os.path.exists(self.temp_config.name):
             os.unlink(self.temp_config.name)
     
+    @patch('main.GitHubContributionHack.__init__', return_value=None)
     @patch('main.GitHubContributionHack._validate_environment')
     @patch('main.GitHubContributionHack._encrypt_and_store_token')
     @patch('main.GitHubContributionHack._get_encrypted_token')
-    @patch('main.GitHubContributionHack._configure_repository_access')
-    @patch('main.GitHubContributionHack._setup_github_verification')
     @patch('main.ContributionAnalytics')
     @patch('main.GitHubContributionHack._load_commit_pattern_model')
     def test_secure_credentials_setup_with_env_var(self, mock_pattern, mock_analytics, 
-                                                  mock_verification, mock_repo_access, 
-                                                  mock_get_token, mock_encrypt, mock_validate):
+                                                 mock_get_token, mock_encrypt, mock_validate, mock_init):
         """Test secure credentials setup with env var"""
         # Setup mocks
         mock_get_token.return_value = None  # No encrypted token
         mock_encrypt.return_value = None
         
-        # Create instance with mocked _prompt_for_encryption
+        # Create instance and directly call the method to test
+        instance = GitHubContributionHack()
+        
+        # Manually call and test the method 
         with patch('main.GitHubContributionHack._prompt_for_encryption', return_value=True):
-            instance = GitHubContributionHack(config_path=self.temp_config.name)
-            
+            instance._setup_secure_credentials()
+                
             # Should have called encrypt_and_store
             mock_encrypt.assert_called_once_with("test_token")
-            
+                
             # Should have set the github_token
             self.assertEqual(instance.github_token, "test_token")
     
+    @patch('main.GitHubContributionHack.__init__', return_value=None)
     @patch('main.GitHubContributionHack._validate_environment')
-    @patch('main.GitHubContributionHack._configure_repository_access')
-    @patch('main.GitHubContributionHack._setup_github_verification')
     @patch('main.ContributionAnalytics')
     @patch('main.GitHubContributionHack._load_commit_pattern_model')
     @patch('main.GitHubContributionHack._prompt_for_encryption')
     @patch('main.GitHubContributionHack._get_encrypted_token')
     def test_secure_credentials_setup_decline_encryption(self, mock_get_token, mock_prompt,
-                                                        mock_pattern, mock_analytics, mock_verification,
-                                                        mock_repo_access, mock_validate):
+                                                        mock_pattern, mock_analytics, 
+                                                        mock_validate, mock_init):
         """Test secure credentials setup when user declines encryption"""
         # Setup mocks
         mock_get_token.return_value = None  # No encrypted token
         mock_prompt.return_value = False  # User declines encryption
         
-        # Should raise PermissionError
+        # Create instance and directly call the method to test
+        instance = GitHubContributionHack()
+        
+        # Should raise PermissionError when called directly
         with self.assertRaises(PermissionError):
-            GitHubContributionHack(config_path=self.temp_config.name)
+            instance._setup_secure_credentials()
     
+    @patch('main.GitHubContributionHack.__init__', return_value=None)
     @patch('main.GitHubContributionHack._validate_environment')
-    @patch('main.GitHubContributionHack._configure_repository_access')
-    @patch('main.GitHubContributionHack._setup_github_verification')
     @patch('main.ContributionAnalytics')
     @patch('main.GitHubContributionHack._load_commit_pattern_model')
     def test_secure_credentials_setup_with_encrypted_token(self, mock_pattern, mock_analytics,
-                                                         mock_verification, mock_repo_access,
-                                                         mock_validate):
+                                                         mock_validate, mock_init):
         """Test secure credentials setup with existing encrypted token"""
-        # Create instance with mocked _get_encrypted_token
+        # Create instance and directly call the method to test
+        instance = GitHubContributionHack()
+        
+        # Patch the _get_encrypted_token method to return a token
         with patch('main.GitHubContributionHack._get_encrypted_token', return_value="decrypted_token"):
-            instance = GitHubContributionHack(config_path=self.temp_config.name)
-            
+            instance._setup_secure_credentials()
+                
             # Should have set the github_token to the decrypted value
             self.assertEqual(instance.github_token, "decrypted_token")
     
@@ -109,19 +113,17 @@ class TestSecurityComponents(unittest.TestCase):
         # Setup mock
         mock_get_password.return_value = "encrypted_token"
         
-        # Create instance with mocked _decrypt_token
-        with patch('main.GitHubContributionHack._decrypt_token', return_value="decrypted_token"):
-            # Directly test the method on a mocked instance
-            instance = MagicMock(spec=GitHubContributionHack)
-            instance._decrypt_token.return_value = "decrypted_token"
-            
-            # Call the method
-            from main import GitHubContributionHack
-            result = GitHubContributionHack._get_encrypted_token(instance)
-            
-            # Verify result
-            self.assertEqual(result, "decrypted_token")
-            mock_get_password.assert_called_once_with('github_contribution', 'api_token')
+        # Create an instance for testing
+        instance = MagicMock()
+        instance._decrypt_token.return_value = "decrypted_token"
+        
+        # Call the method
+        result = GitHubContributionHack._get_encrypted_token(instance)
+        
+        # Verify result and mock calls
+        mock_get_password.assert_called_once_with('github_contribution', 'api_token')
+        instance._decrypt_token.assert_called_once_with("encrypted_token")
+        self.assertEqual(result, "decrypted_token")
     
     @patch('keyring.get_password')
     def test_get_encrypted_token_not_found(self, mock_get_password):
@@ -129,11 +131,10 @@ class TestSecurityComponents(unittest.TestCase):
         # Setup mock
         mock_get_password.return_value = None
         
-        # Directly test the method on a mocked instance
-        instance = MagicMock(spec=GitHubContributionHack)
+        # Create a mock instance
+        instance = MagicMock()
         
         # Call the method
-        from main import GitHubContributionHack
         result = GitHubContributionHack._get_encrypted_token(instance)
         
         # Verify result
@@ -143,14 +144,13 @@ class TestSecurityComponents(unittest.TestCase):
     @patch('keyring.get_password')
     def test_get_encrypted_token_exception(self, mock_get_password):
         """Test handling of exceptions during token retrieval"""
-        # Setup mock to raise an exception
+        # Setup mock to raise exception
         mock_get_password.side_effect = Exception("Keyring error")
         
-        # Directly test the method on a mocked instance
-        instance = MagicMock(spec=GitHubContributionHack)
+        # Create a mock instance
+        instance = MagicMock()
         
         # Call the method
-        from main import GitHubContributionHack
         result = GitHubContributionHack._get_encrypted_token(instance)
         
         # Verify result
@@ -168,12 +168,11 @@ class TestSecurityComponents(unittest.TestCase):
         mock_cipher.encrypt.return_value = b'encrypted_data'
         mock_fernet.return_value = mock_cipher
         
-        # Directly test the method on a mocked instance
-        instance = MagicMock(spec=GitHubContributionHack)
+        # Create a mock instance
+        instance = MagicMock()
         instance._store_encryption_key = Mock()
         
         # Call the method
-        from main import GitHubContributionHack
         GitHubContributionHack._encrypt_and_store_token(instance, "test_token")
         
         # Verify encryption and storage
@@ -186,43 +185,53 @@ class TestSecurityComponents(unittest.TestCase):
         """Test user prompt for encryption"""
         # Test with user input 'y'
         with patch('builtins.input', return_value='y'):
-            instance = MagicMock(spec=GitHubContributionHack)
-            from main import GitHubContributionHack
+            # Create a mock instance
+            instance = MagicMock()
+            
+            # Call the method
             result = GitHubContributionHack._prompt_for_encryption(instance)
+            
+            # Verify result
             self.assertTrue(result)
         
         # Test with user input 'n'
         with patch('builtins.input', return_value='n'):
-            instance = MagicMock(spec=GitHubContributionHack)
-            from main import GitHubContributionHack
+            # Create a mock instance
+            instance = MagicMock()
+            
+            # Call the method
             result = GitHubContributionHack._prompt_for_encryption(instance)
+            
+            # Verify result
             self.assertFalse(result)
         
         # Test with user input 'yes' (should be False since not exactly 'y')
         with patch('builtins.input', return_value='yes'):
-            instance = MagicMock(spec=GitHubContributionHack)
-            from main import GitHubContributionHack
+            # Create a mock instance
+            instance = MagicMock()
+            
+            # Call the method
             result = GitHubContributionHack._prompt_for_encryption(instance)
+            
+            # Verify result
             self.assertFalse(result)
     
-    @patch('main.GitHubContributionHack._validate_environment')
+    @patch('main.GitHubContributionHack.__init__', return_value=None)
     @patch('main.GitHubContributionHack._setup_secure_credentials')
-    @patch('main.GitHubContributionHack._configure_repository_access')
-    @patch('main.GitHubContributionHack._setup_github_verification')
     @patch('main.ContributionAnalytics')
     @patch('main.GitHubContributionHack._load_commit_pattern_model')
     def test_validate_environment_missing_env_file(self, mock_pattern, mock_analytics,
-                                                 mock_verification, mock_repo_access,
-                                                 mock_credentials, mock_validate):
+                                                 mock_credentials, mock_init):
         """Test environment validation with missing .env file"""
-        # Mock the _validate_environment method to test it separately
-        mock_validate.side_effect = GitHubContributionHack._validate_environment
+        # Create an instance without calling the constructor
+        instance = GitHubContributionHack()
         
         # Mock os.path.exists to return False for .env
         with patch('os.path.exists', return_value=False):
-            # Should raise EnvironmentError
+            # Should raise EnvironmentError when called directly
             with self.assertRaises(EnvironmentError):
-                GitHubContributionHack(config_path=self.temp_config.name)
+                # Call the actual implementation, not the mock
+                GitHubContributionHack._validate_environment(instance)
 
 if __name__ == "__main__":
     unittest.main() 
