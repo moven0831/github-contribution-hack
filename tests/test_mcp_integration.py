@@ -201,7 +201,7 @@ class TestMCPClient(unittest.TestCase):
     def test_generate_fallback_code_unknown(self):
         """Test fallback code generation for unknown language"""
         code = self.client._generate_fallback_code("unknown")
-        self.assertIn("Generated content at", code)
+        self.assertIn("Generated content for unknown at", code)
 
     @patch('mcp_integration.MCPClient._make_api_request')
     def test_generate_commit_message_success(self, mock_api_request):
