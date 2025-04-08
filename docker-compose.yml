@@ -1,0 +1,31 @@
+version: '3.8' # Specifies the Docker Compose version
+
+services:
+  app:
+    build: . # Tells Compose to build an image from the Dockerfile in the current directory
+    container_name: github_contribution_app # Optional: assigns a specific name to the container
+    ports:
+      # Maps port 5000 on the host to port 5000 in the container
+      # This is needed if you run the web interface (python main.py --web)
+      - "5000:5000"
+    env_file:
+      # Loads environment variables from the .env file in the current directory
+      # Make sure your GITHUB_TOKEN is defined in the .env file
+      - .env
+    # The default command to run when the container starts (same as Dockerfile CMD)
+    # Runs the contribution logic by default
+    command: ["python", "main.py"]
+    # volumes:
+      # Optional: Mount the current directory into the container's /app directory
+      # Useful for development: code changes on your host are reflected inside the container
+      # Uncomment the line below if you want this behavior
+      # - .:/app
+
+# To run the contribution logic (default):
+# docker-compose up --build
+
+# To run the web interface instead:
+# docker-compose run --service-ports app python main.py --web --host 0.0.0.0
+
+# To stop and remove containers, networks:
+# docker-compose down 
