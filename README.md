@@ -168,6 +168,58 @@ Key monitoring features:
 - Repository activity distribution
 - Automated GitHub commit verification
 
+## Running with Docker (Recommended)
+
+Using Docker and Docker Compose is the recommended way to run this application, as it handles dependency management and provides a consistent environment.
+
+### Prerequisites
+
+-   [Docker](https://docs.docker.com/get-docker/) installed
+-   [Docker Compose](https://docs.docker.com/compose/install/) installed (usually included with Docker Desktop)
+
+### Configuration
+
+1.  **Copy the example environment file:**
+    ```bash
+    cp .env.example .env
+    ```
+2.  **Edit the `.env` file:** Add your GitHub Personal Access Token:
+    ```env
+    GITHUB_TOKEN=your_github_token_here
+    # Add other variables like MCP_API_KEY if needed
+    ```
+    *Note: The `setup_security.py` script is not used in the Docker setup. Credentials are managed directly via the `.env` file.*
+
+### Usage
+
+1.  **Build and Run (Default - Contribution Logic):**
+    To build the Docker image and start the container running the main contribution script (`main.py`):
+    ```bash
+    docker-compose up --build
+    ```
+    The `--build` flag is only needed the first time or when you change `Dockerfile` or `requirements.txt`. Use `docker-compose up` for subsequent runs.
+
+2.  **Run the Web Interface:**
+    To start the web interface instead of the default script:
+    ```bash
+    docker-compose run --rm --service-ports app python main.py --web --host 0.0.0.0
+    ```
+    -   `--rm`: Automatically removes the container when it exits.
+    -   `--service-ports`: Publishes the port defined in `docker-compose.yml` (5000).
+    -   `app`: The name of the service defined in `docker-compose.yml`.
+    -   `python main.py --web --host 0.0.0.0`: The command to run inside the container.
+
+3.  **Stop the Application:**
+    To stop the services started with `docker-compose up`:
+    ```bash
+    docker-compose down
+    ```
+    This stops and removes the containers and the network created by Compose.
+
+### Development with Docker
+
+The `docker-compose.yml` file includes a commented-out `volumes` section. If you uncomment the `- .:/app` line, the project directory on your host machine will be mounted into the container at `/app`. This means code changes you make locally will be reflected inside the container immediately, which is useful for development without needing to rebuild the image constantly.
+
 ## Development and Testing
 
 ### Running Tests
