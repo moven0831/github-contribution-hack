@@ -246,7 +246,7 @@ To quickly see the GitHub Contribution Hack in action:
 1. Clone the repository:
    ```
    git clone https://github.com/yourusername/github-contribution-hack.git
-   cd github-contribution-hack  
+   cd github-contribution-hack
    ```
 
 2. Install the required dependencies:
@@ -261,6 +261,69 @@ To quickly see the GitHub Contribution Hack in action:
      cp .env.example .env
      ```
    - Replace `your_github_token_here` in `.env` with your actual token
+
+## Deploying with Docker
+
+You can build and run this application using Docker for easy deployment on cloud servers or any machine with Docker installed.
+
+### Prerequisites
+
+- Docker installed on your system.
+
+### Building the Docker Image
+
+Navigate to the project's root directory (where the `Dockerfile` is located) and run the following command to build the image. Replace `<image_name>` with a name for your image (e.g., `github-contributor`).
+
+```bash
+docker build -t <image_name> .
+```
+
+### Running the Container
+
+#### Standard Contribution Mode
+
+To run the container in the default mode (which executes `hack.make_contributions()`):
+
+```bash
+docker run --rm -e GITHUB_TOKEN="YOUR_GITHUB_PERSONAL_ACCESS_TOKEN" <image_name>
+```
+
+**Important:** You MUST provide your GitHub Personal Access Token via the `GITHUB_TOKEN` environment variable.
+
+#### Web Interface Mode
+
+To run the container with the web interface enabled:
+
+```bash
+docker run --rm -e GITHUB_TOKEN="YOUR_GITHUB_PERSONAL_ACCESS_TOKEN" -p 5000:5000 <image_name> python main.py --web --host 0.0.0.0 --port 5000
+```
+
+This will:
+- Pass your GitHub token.
+- Map port 5000 on your host machine to port 5000 in the container.
+- Start the web interface listening on all interfaces (`0.0.0.0`) inside the container.
+- You can then access the web interface at `http://localhost:5000` (or your server's IP address if running remotely).
+
+#### Using a Custom Configuration
+
+If you want to use a `config.yml` file from your host machine instead of the one included in the image, you can mount it as a volume:
+
+```bash
+# Example for standard mode with custom config
+docker run --rm \\
+  -e GITHUB_TOKEN="YOUR_GITHUB_PERSONAL_ACCESS_TOKEN" \\
+  -v $(pwd)/path/to/your/config.yml:/app/config.yml \\
+  <image_name>
+
+# Example for web mode with custom config
+docker run --rm \\
+  -e GITHUB_TOKEN="YOUR_GITHUB_PERSONAL_ACCESS_TOKEN" \\
+  -p 5000:5000 \\
+  -v $(pwd)/path/to/your/config.yml:/app/config.yml \\
+  <image_name> python main.py --web --host 0.0.0.0 --port 5000
+```
+
+Replace `$(pwd)/path/to/your/config.yml` with the actual path to your configuration file.
 
 ## Responsible Usage
 
