@@ -1,0 +1,53 @@
+# Git directory
+.git/
+
+# Python virtual environment
+venv/
+*.venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# IDE/Editor specific files
+.idea/
+.vscode/
+
+# OS specific files
+.DS_Store
+
+# Environment files (should be handled via environment variables in container)
+.env
+*.env.*
+
+# Local database
+*.db
+
+# Example files
+EXAMPLE_*
+DEMO.md
+CONTRIBUTING.md
+
+# Config files (often mounted or managed separately)
+# config.yml  # Commented out - might need it in the image if not mounting
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# Docs (optional - uncomment if not needed in image)
+# docs/
+
+# Tests (optional - uncomment if not needed in image)
+# tests/
+# run_tests.py
+# pytest.ini 
