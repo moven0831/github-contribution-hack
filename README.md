@@ -1,6 +1,6 @@
 # Stay in a Streak! GitHub Contribution Hack
 
-This project aims to create a program that automatically makes contributions to a connected GitHub account, allowing the contribution graph to maintain a consistent streak.
+This project provides a tool to automatically make contributions to a connected GitHub account, helping you maintain a consistent activity streak on your contribution graph.
 
 ## Features
 
@@ -37,7 +37,9 @@ This project aims to create a program that automatically makes contributions to 
 - [Optional] Node.js v18+ for advanced monitoring features
 - [Optional] MCP API key for enhanced code generation
 
-### Security Setup
+### Security Setup (Non-Docker)
+
+*Note: This setup is for running the application directly on your machine. For Docker setups, configure credentials using the `.env` file as described in the Docker section.*
 
 Instead of manual .env configuration, run the security initialization:
 ```bash
@@ -170,7 +172,7 @@ Key monitoring features:
 
 ## Running with Docker (Recommended)
 
-Using Docker and Docker Compose is the recommended way to run this application, as it handles dependency management and provides a consistent environment.
+Using Docker and Docker Compose is the recommended way to run this application, as it encapsulates dependencies and ensures a consistent runtime environment across different machines.
 
 ### Prerequisites
 
@@ -188,7 +190,7 @@ Using Docker and Docker Compose is the recommended way to run this application, 
     GITHUB_TOKEN=your_github_token_here
     # Add other variables like MCP_API_KEY if needed
     ```
-    *Note: The `setup_security.py` script is not used in the Docker setup. Credentials are managed directly via the `.env` file.*
+    *Note: For Docker setups, credentials are provided via this `.env` file. The `setup_security.py` script is intended for non-Docker environments.*
 
 ### Usage
 
@@ -197,7 +199,7 @@ Using Docker and Docker Compose is the recommended way to run this application, 
     ```bash
     docker-compose up --build
     ```
-    The `--build` flag is only needed the first time or when you change `Dockerfile` or `requirements.txt`. Use `docker-compose up` for subsequent runs.
+    The `--build` flag is only needed the first time or when you change `Dockerfile` or `requirements.txt`. Use `docker-compose up` for subsequent runs. To run in the background, use `docker-compose up -d`.
 
 2.  **Run the Web Interface:**
     To start the web interface instead of the default script:
@@ -214,7 +216,7 @@ Using Docker and Docker Compose is the recommended way to run this application, 
     ```bash
     docker-compose down
     ```
-    This stops and removes the containers and the network created by Compose.
+    If you ran in detached mode (`-d`), this command is necessary to stop the containers. It stops and removes the containers and the network created by Compose.
 
 ### Development with Docker
 
