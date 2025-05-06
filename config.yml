@@ -14,35 +14,47 @@ max_commits: 3
 min_interval: 12
 max_interval: 24
 
+# Database settings
+database:
+  path: "contributions.db" # Path to the SQLite database file
+
+# Performance Settings
+performance:
+  max_workers: 4          # Max concurrent threads for processing repositories
+  parallel_repos: True    # Whether to process repositories in parallel
+
+# General commit generation settings (used when MCP is disabled or fails)
+commit_generation:
+  ml_based_chance: 0.3       # Chance of using Markovify model for commit message (0.0 to 1.0)
+  code_content_chance: 0.4   # Chance of generating code vs. doc content (0.0 to 1.0)
+  file_types:                # Default file types for generated content
+    - "txt"
+    - "md"
+    - "py"
+    - "js"
+    - "json"
+
 split_commits:
   enabled: true
   max_lines_per_commit: 5
-  message_prefix: "Automated commit"
-
-intelligent_patterns:
-  enabled: true
-  content_types:
-    - documentation
-    - code
-    - config
-  time_distribution: poisson
-  markov_source: "commit_patterns.json"
-  max_commit_size: 100
-  min_commit_size: 10
+  message_prefix: "Automated commit" # Prefix for split commit messages
 
 # MCP Integration Settings
 mcp_integration:
-  enabled: true
-  api_endpoint: "https://api.mcp.dev/v1"  # Set to your MCP API endpoint
-  complexity: "medium"                     # low, medium, high
+  enabled: false # Set to true to enable AI-powered content generation
+  api_key: null  # Your MCP API key. Can also be set via MCP_API_KEY environment variable.
+  api_endpoint: "https://api.mcp.dev/v1"
+  max_retries: 3
+  request_timeout: 15 # seconds
+  complexity: "low"   # Desired complexity of generated content: low, medium, high
   language_weights:
     python: 0.4
     javascript: 0.3
     markdown: 0.2
     text: 0.1
-  repository_analysis: true
-  content_quality: "high"
-  dry_run: false                           # Set to true to test MCP without making actual commits
+  repository_analysis: true # Allow MCP to analyze repo context (if supported by endpoint)
+  content_quality: "medium" # Desired quality of content (if supported by endpoint)
+  dry_run: false            # If true, MCP calls are simulated, no actual generation/commits by MCP
 
 # Monitoring Settings
 monitoring:
@@ -74,44 +86,64 @@ ui:
 
 # Visualization Settings
 visualization:
+  style: "ggplot"             # Default Matplotlib style for charts (e.g., ggplot, seaborn-v0_8-darkgrid)
+  cache_dir: null             # Base directory for caching visualization images (null for system temp: e.g. /tmp or .cache/viz_output)
   heatmap:
     days: 365
-    color_scheme: "github"    # github, custom
+    color_scheme: "Greens"    # Matplotlib Cmap for heatmap (e.g., Greens, YlGn, OrRd)
   streak_chart:
-    include_predictions: true
+    include_predictions: true # (This key might not be used yet, but was in original)
   activity_timeline:
     days: 90
-    include_average: true
+    include_average: true     # (This key might not be used yet, but was in original)
   repo_distribution:
-    limit_repos: 10
+    limit_repos: 10           # Max repositories to show in pie chart, others grouped
 
 # Notification Settings
 notifications:
   enabled: true
+  manager:                             # Settings for the NotificationManager itself
+    max_history: 100                 # Max number of notifications to keep in history
+    level_routing:                   # Default channels to send notifications to, by level
+      info: ["desktop"]              # e.g., send 'info' level to 'desktop'
+      warning: ["desktop", "email"]
+      error: ["email", "webhook"]    # Send 'error' to 'email' and 'webhook'
+    throttle_rules:                  # Rules to prevent notification spam
+      frequent_info:                 # A unique name for the rule
+        pattern: ".*Info Notification.*" # Regex pattern to match notification title
+        max_count: 10                # Max count of matching notifications
+        time_window_seconds: 1800    # Within this time window (30 minutes)
+      generic_error_throttle:
+        pattern: ".*Error.*"
+        max_count: 5
+        time_window_seconds: 3600    # 1 hour
   email:
     enabled: false
     smtp_server: "smtp.example.com"
     smtp_port: 587
-    username: "your_username"
-    password: "your_password"
-    sender: "sender@example.com"
+    username: "your_username"        # Your SMTP username
+    password: "your_password"        # Your SMTP password (consider using env var for security)
+    sender: "notifications@example.com"
     recipients:
-      - "recipient@example.com"
-  
+      - "recipient1@example.com"
+      # - "recipient2@example.com"
   webhook:
     enabled: false
-    url: "https://example.com/webhook"
-    headers:
-      Content-Type: "application/json"
-      Authorization: "Bearer your_token_here"
-  
+    url: ""                          # URL for the webhook endpoint
+    custom_headers: {}               # Optional custom headers, e.g., {"X-API-Key": "your-key"}
+      # Content-Type: "application/json" # Default, usually not needed here
+      # Authorization: "Bearer your_token_here"
   desktop:
-    enabled: true
-  
-  throttle_rules:
-    - pattern: "Warning"
-      max_count: 5
-      time_window: 3600  # seconds
-    - pattern: "Info"
-      max_count: 10
-      time_window: 1800  # seconds 
+    enabled: true                   # Requires 'notify2' or 'plyer' package
+
+# Intelligent Patterns
+intelligent_patterns: # This section might be partially superseded by mcp_integration or commit_generation settings
+  enabled: true
+  content_types:
+    - documentation
+    - code
+    - config
+  time_distribution: poisson
+  markov_source: "commit_patterns.json" # Path to Markovify model
+  max_commit_size: 100
+  min_commit_size: 10 
