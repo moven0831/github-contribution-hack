@@ -5,7 +5,6 @@ Provides a web dashboard for monitoring and configuring the contribution system.
 Uses Flask for the backend and Bootstrap for the frontend.
 """
 import os
-import yaml
 import json
 import logging
 import threading
@@ -17,6 +16,7 @@ from waitress import serve
 # Import local modules
 from visualization import ContributionVisualizer
 from notification_system import NotificationManager, setup_notifications
+from config_loader import ConfigManager
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -24,19 +24,18 @@ logger = logging.getLogger(__name__)
 class WebInterface:
     """Web interface for the GitHub Contribution Hack"""
     
-    def __init__(self, config_path='config.yml', host='127.0.0.1', port=5000):
+    def __init__(self, config_manager: ConfigManager, host='127.0.0.1', port=5000):
         """
         Initialize the web interface
         
         Args:
-            config_path: Path to the configuration file
+            config_manager: Instance of ConfigManager
             host: Host to bind the server to
             port: Port to bind the server to
         """
-        self.config_path = config_path
+        self.config_manager = config_manager
         self.host = host
         self.port = port
-        self.config = self._load_config()
         
         # Create Flask app
         self.app = Flask(__name__, 
@@ -45,14 +44,14 @@ class WebInterface:
         
         # Initialize visualization
         try:
-            self.visualizer = ContributionVisualizer()
+            self.visualizer = ContributionVisualizer(self.config_manager)
         except Exception as e:
             logger.error(f"Failed to initialize visualizer: {str(e)}")
             self.visualizer = None
         
         # Initialize notification system
         try:
-            self.notification_manager = setup_notifications(self.config)
+            self.notification_manager = setup_notifications(self.config_manager)
         except Exception as e:
             logger.error(f"Failed to initialize notification system: {str(e)}")
             self.notification_manager = None
@@ -64,25 +63,6 @@ class WebInterface:
         # Register routes
         self._register_routes()
         
-    def _load_config(self):
-        """Load configuration from file"""
-        try:
-            with open(self.config_path, 'r') as config_file:
-                return yaml.safe_load(config_file)
-        except Exception as e:
-            logger.error(f"Failed to load configuration: {str(e)}")
-            return {}
-            
-    def _save_config(self):
-        """Save configuration to file"""
-        try:
-            with open(self.config_path, 'w') as config_file:
-                yaml.dump(self.config, config_file, default_flow_style=False)
-            return True
-        except Exception as e:
-            logger.error(f"Failed to save configuration: {str(e)}")
-            return False
-            
     def _register_routes(self):
         """Register Flask routes"""
         # Dashboard
@@ -109,19 +89,19 @@ class WebInterface:
     
     def config_page(self):
         """Render the configuration page"""
-        return render_template('config.html', config=self.config)
+        return render_template('config.html', config=self.config_manager.get_all_config())
     
     def repositories_config(self):
         """Handle repository configuration"""
         if request.method == 'POST':
             # Update repositories in config
             repositories = request.form.getlist('repositories')
-            self.config['repositories'] = repositories
-            self._save_config()
+            self.config_manager.set('repositories', repositories)
+            self.config_manager.save_config()
             return redirect(url_for('config_page'))
         
         return render_template('repositories_config.html', 
-                               repositories=self.config.get('repositories', []))
+                               repositories=self.config_manager.get('repositories', []))
     
     def notifications_config(self):
         """Handle notification configuration"""
@@ -133,7 +113,7 @@ class WebInterface:
             notification_config['email'] = {
                 'enabled': 'email_enabled' in request.form,
                 'smtp_server': request.form.get('smtp_server', ''),
-                'smtp_port': int(request.form.get('smtp_port', 587)),
+                'smtp_port': int(request.form.get('smtp_port', 587) or 587),
                 'username': request.form.get('smtp_username', ''),
                 'password': request.form.get('smtp_password', ''),
                 'sender': request.form.get('email_sender', ''),
@@ -151,17 +131,17 @@ class WebInterface:
                 'enabled': 'desktop_enabled' in request.form
             }
             
-            # Update config
-            self.config['notifications'] = notification_config
-            self._save_config()
+            # Update config using ConfigManager
+            self.config_manager.set('notifications', notification_config)
+            self.config_manager.save_config()
             
             # Reinitialize notification manager
-            self.notification_manager = setup_notifications(self.config)
+            self.notification_manager = setup_notifications(self.config_manager)
             
             return redirect(url_for('config_page'))
         
         return render_template('notifications_config.html', 
-                               notif_config=self.config.get('notifications', {}))
+                               notif_config=self.config_manager.get('notifications', {}))
     
     def get_stats(self):
         """API endpoint to get contribution statistics"""
@@ -200,22 +180,21 @@ class WebInterface:
         """API endpoint to get or update configuration"""
         if request.method == 'POST':
             # Update config with JSON data
-            updated_config = request.json
-            if updated_config:
-                # Merge with existing config
-                for key, value in updated_config.items():
-                    self.config[key] = value
+            updated_config_data = request.json
+            if updated_config_data:
+                # Merge with existing config using ConfigManager
+                self.config_manager.update_config(updated_config_data)
                 
                 # Save to file
-                if self._save_config():
+                if self.config_manager.save_config():
                     return jsonify({'status': 'success'})
                 else:
                     return jsonify({'status': 'error', 'message': 'Failed to save configuration'})
             else:
                 return jsonify({'status': 'error', 'message': 'Invalid configuration data'})
         else:
-            # Return current config as JSON
-            return jsonify(self.config)
+            # Return current config as JSON using ConfigManager
+            return jsonify(self.config_manager.get_all_config())
     
     def get_notifications(self):
         """API endpoint to get notification history"""
@@ -336,6 +315,22 @@ class WebInterface:
             
         self.running = False
         logger.info("Web interface stopped")
+
+def setup_web_interface(config_manager: ConfigManager, host='127.0.0.1', port=5000):
+    """
+    Set up and return the web interface instance.
+
+    Args:
+        config_manager: The ConfigManager instance.
+        host: The host for the web server.
+        port: The port for the web server.
+
+    Returns:
+        WebInterface: The initialized web interface instance.
+    """
+    # Pass the ConfigManager instance to WebInterface
+    interface = WebInterface(config_manager=config_manager, host=host, port=port)
+    return interface
 
 # Create app directory structure
 def setup_web_interface():

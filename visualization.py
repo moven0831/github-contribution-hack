@@ -16,22 +16,33 @@ import io
 import base64
 from typing import Dict, List, Tuple, Optional, Union
 
+from config_loader import ConfigManager
+
 class ContributionVisualizer:
-    def __init__(self, db_path='contributions.db'):
+    def __init__(self, config_manager: Optional[ConfigManager] = None, db_path: Optional[str] = None):
         """
         Initialize the contribution visualizer
         
         Args:
-            db_path: Path to the SQLite database
+            config_manager: Optional ConfigManager instance.
+            db_path: Optional path to the SQLite database. Deprecated if config_manager is provided.
         """
-        self.db_path = db_path
+        effective_db_path = 'contributions.db' # Default
+        if config_manager:
+            effective_db_path = config_manager.get('database.path', 'contributions.db')
+        elif db_path:
+            effective_db_path = db_path
+            print("Warning: Passing db_path directly to ContributionVisualizer is deprecated. Use ConfigManager.")
+
+        self.db_path = effective_db_path
         self._check_database()
         
         # Set default styles for consistent visuals
-        plt.style.use('ggplot')
+        plt.style.use(config_manager.get('visualization.style', 'ggplot') if config_manager else 'ggplot')
         
         # Create cache directory for exports
-        self.cache_dir = Path(tempfile.gettempdir()) / 'github_contrib_viz'
+        cache_dir_base = config_manager.get('visualization.cache_dir', tempfile.gettempdir()) if config_manager else tempfile.gettempdir()
+        self.cache_dir = Path(cache_dir_base) / 'github_contrib_viz'
         os.makedirs(self.cache_dir, exist_ok=True)
         
     def _check_database(self):
@@ -418,19 +429,87 @@ class ContributionVisualizer:
             return None
 
 def main():
-    """Main function for testing the visualizer"""
-    visualizer = ContributionVisualizer()
-    
-    # Generate sample visualizations
-    heatmap_path = visualizer.generate_heatmap()
-    streak_path = visualizer.generate_streak_chart()
-    timeline_path = visualizer.generate_activity_timeline()
-    repo_path = visualizer.generate_repo_distribution()
-    
-    print(f"Generated heatmap: {heatmap_path}")
-    print(f"Generated streak chart: {streak_path}")
-    print(f"Generated timeline: {timeline_path}")
-    print(f"Generated repo distribution: {repo_path}")
+    """Example usage of the visualizer (for testing)"""
+    print("Generating visualizations...")
+
+    # For testing, we can create a dummy ConfigManager or pass db_path directly
+    # Option 1: Dummy ConfigManager (preferred for new structure)
+    class MockConfigManager:
+        def get(self, key, default=None):
+            if key == 'database.path':
+                return 'contributions.db' # Ensure this file exists or visualizer will fail
+            if key == 'visualization.style':
+                return 'seaborn-v0_8-darkgrid'
+            if key == 'visualization.cache_dir':
+                return '.cache/viz_output' # Example custom cache
+            return default
+
+    # Create a dummy contributions.db for testing if it doesn't exist
+    if not os.path.exists('contributions.db'):
+        print("Creating dummy contributions.db for testing...")
+        conn = sqlite3.connect('contributions.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS contributions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                repo TEXT NOT NULL,
+                commit_count INTEGER DEFAULT 1,
+                user TEXT
+            )
+        ''')
+        # Add some dummy data
+        for i in range(90):
+            date = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d %H:%M:%S')
+            repo = f'repo{i % 3}'
+            commits = (i % 5) + 1
+            cursor.execute("INSERT INTO contributions (timestamp, repo, commit_count) VALUES (?, ?, ?)", (date, repo, commits))
+        conn.commit()
+        conn.close()
+        print("Dummy contributions.db created and populated.")
+    else:
+        print("Using existing contributions.db for testing.")
+
+    config_manager_instance = MockConfigManager()
+    visualizer = ContributionVisualizer(config_manager=config_manager_instance)
+
+    # Option 2: Direct db_path (legacy, for simpler testing if ConfigManager setup is complex)
+    # visualizer = ContributionVisualizer(db_path='contributions.db') 
+
+    try:
+        heatmap_path = visualizer.generate_heatmap()
+        if heatmap_path:
+            print(f"Heatmap generated: {heatmap_path}")
+            base64_img = visualizer.get_image_base64(heatmap_path)
+            # print(f"Base64 Heatmap: {base64_img[:100]}...") # For brevity
+        else:
+            print("Failed to generate heatmap.")
+
+        streak_path = visualizer.generate_streak_chart()
+        if streak_path:
+            print(f"Streak chart generated: {streak_path}")
+        else:
+            print("Failed to generate streak chart.")
+
+        timeline_path = visualizer.generate_activity_timeline()
+        if timeline_path:
+            print(f"Activity timeline generated: {timeline_path}")
+        else:
+            print("Failed to generate activity timeline.")
+
+        repo_dist_path = visualizer.generate_repo_distribution()
+        if repo_dist_path:
+            print(f"Repository distribution chart generated: {repo_dist_path}")
+        else:
+            print("Failed to generate repository distribution chart.")
+            
+    except FileNotFoundError as e:
+        print(f"Error: Database file not found. {e}")
+        print("Please ensure 'contributions.db' exists or setup_security.py has been run if it creates the DB.")
+    except ValueError as e:
+        print(f"Error: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     main() 
