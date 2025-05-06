@@ -7,6 +7,7 @@ This project provides a tool to automatically make contributions to a connected 
 - Automatically create commits and push them to GitHub on a regular schedule
 - Configurable settings for commit frequency and repository selection
 - Seamless integration with GitHub API for authentication and contribution tracking
+- **Centralized Configuration**: Easy management of all settings via `config.yml` using the new `ConfigManager`.
 - **Enhanced Security**: Encrypted credential storage and system keyring integration
 - **Intelligent Patterns**: ML-powered commit messages and natural time distribution
 - **Real-Time Monitoring**: Interactive dashboard with streak analytics and verification
@@ -26,6 +27,97 @@ This project provides a tool to automatically make contributions to a connected 
 - [Sample Configurations](docs/SAMPLE_CONFIGURATIONS.md) - Ready-to-use configuration examples
 - [Best Practices](docs/BEST_PRACTICES.md) - Guidelines for responsible usage
 - [Contributing](CONTRIBUTING.md) - Guide for contributors
+
+## Configuration (`config.yml`)
+
+This project now uses a centralized `config.yml` file to manage all its settings. A `ConfigManager` class (`config_loader.py`) is responsible for loading, accessing, and saving this configuration, ensuring a single source of truth for all modules.
+
+Below are the key configuration sections and options available. For sensitive information like API keys (`GITHUB_TOKEN`, `MCP_API_KEY`), it's recommended to use environment variables, which are typically loaded by the application and can override or supplement values from `config.yml`.
+
+### Core Settings
+
+-   `repositories`: List of repository names (e.g., `username/repo-name`) to make contributions to.
+-   `min_commits`: Minimum number of commits per repository per run (Default: `1`).
+-   `max_commits`: Maximum number of commits per repository per run (Default: `3`).
+-   `min_interval`: Minimum interval between contribution runs in hours (Default: `12`).
+-   `max_interval`: Maximum interval between contribution runs in hours (Default: `24`).
+
+### Database
+
+-   `database`:
+    -   `path`: Path to the SQLite database file (Default: `"contributions.db"`). Used by analytics and visualization.
+
+### Performance
+
+-   `performance`:
+    -   `max_workers`: Maximum number of concurrent threads for processing repositories (Default: `4`).
+    -   `parallel_repos`: Boolean, whether to process repositories in parallel (Default: `True`).
+
+### Commit Generation (General)
+
+These settings apply when MCP is disabled or if it fails.
+
+-   `commit_generation`:
+    -   `ml_based_chance`: Probability (0.0 to 1.0) of using the Markovify model for commit messages (Default: `0.3`).
+    -   `code_content_chance`: Probability (0.0 to 1.0) of generating code-like content versus documentation-like content (Default: `0.4`).
+    -   `file_types`: List of file extensions to use for generated files (Default: `["txt", "md", "py", "js", "json"]`).
+
+### Split Commits
+
+-   `split_commits`:
+    -   `enabled`: Boolean, whether to split large generated content into multiple smaller commits (Default: `true`).
+    -   `max_lines_per_commit`: Maximum lines of content per split commit (Default: `5`).
+    -   `message_prefix`: Prefix for commit messages of split commits (Default: `"Automated commit"`).
+
+### MCP Integration (AI-Powered Content)
+
+-   `mcp_integration`:
+    -   `enabled`: Boolean, set to `true` to enable AI-powered content generation (Default: `false`).
+    -   `api_key`: Your MCP API key. Can also be set via `MCP_API_KEY` environment variable. (Default: `null`).
+    -   `api_endpoint`: The API endpoint for MCP (Default: `"https://api.mcp.dev/v1"`).
+    -   `max_retries`: Maximum number of retries for MCP API calls (Default: `3`).
+    -   `request_timeout`: Timeout in seconds for MCP API requests (Default: `15`).
+    -   `complexity`: Desired complexity of generated content (`"low"`, `"medium"`, `"high"`) (Default: `"low"`).
+    -   `language_weights`: A dictionary defining the probability for generating content in specific languages (e.g., `python: 0.4`, `javascript: 0.3`).
+    -   `repository_analysis`: Boolean, allow MCP to analyze repository context (Default: `true`).
+    -   `content_quality`: Desired quality of content (e.g., `"medium"`) (Default: `"medium"`).
+    -   `dry_run`: Boolean, if `true`, MCP calls are simulated (Default: `false`).
+
+### Visualization
+
+-   `visualization`:
+    -   `style`: Default Matplotlib style for charts (e.g., `"ggplot"`, `"seaborn-v0_8-darkgrid"`) (Default: `"ggplot"`).
+    -   `cache_dir`: Base directory for caching visualization images. Set to `null` for system temp directory (e.g., `".cache/viz_output"` or `/tmp/github_contrib_viz`) (Default: `null`).
+    -   `heatmap`:
+        -   `days`: Number of days to include in the heatmap (Default: `365`).
+        -   `color_scheme`: Matplotlib Cmap for heatmap (e.g., `"Greens"`, `"YlGn"`) (Default: `"Greens"`).
+    -   `activity_timeline`:
+        -   `days`: Number of days for the activity timeline (Default: `90`).
+    -   `repo_distribution`:
+        -   `limit_repos`: Max repositories in pie chart before grouping into "Other" (Default: `10`).
+
+### Notifications
+
+-   `notifications`:
+    -   `enabled`: Boolean, master switch for all notifications (Default: `true`).
+    -   `manager`: Settings for the `NotificationManager`.
+        -   `max_history`: Max number of notifications to keep in history (Default: `100`).
+        -   `level_routing`: Default channels for notifications by level (e.g., `info: ["desktop"]`, `error: ["email", "webhook"]`).
+        -   `throttle_rules`: Dictionary of rules to prevent notification spam. Each rule has a `pattern` (regex for title), `max_count`, and `time_window_seconds`.
+            -   Example rule: `frequent_info: { pattern: ".*Info Notification.*", max_count: 10, time_window_seconds: 1800 }`
+    -   `email`:
+        -   `enabled`: Boolean, enable email notifications (Default: `false`).
+        -   `smtp_server`, `smtp_port`, `username`, `password`, `sender`, `recipients`: Standard email settings.
+    -   `webhook`:
+        -   `enabled`: Boolean, enable webhook notifications (Default: `false`).
+        -   `url`: URL for the webhook endpoint.
+        -   `custom_headers`: Optional custom HTTP headers.
+    -   `desktop`:
+        -   `enabled`: Boolean, enable desktop notifications (requires `notify2` or `plyer` package) (Default: `true`).
+
+### Other Sections
+
+The `config.yml` may also contain other sections like `intelligent_patterns`, `monitoring`, `analytics`, and `ui`. These are generally used by specific modules or older parts of the application. Refer to the comments within `config.yml` for their specific purposes.
 
 ## Getting Started
 
@@ -130,32 +222,8 @@ Available visualizations:
 
 #### Notification System
 
-Configure notifications in `config.yml`:
-```yaml
-notifications:
-  enabled: true
-  email:
-    enabled: true
-    smtp_server: smtp.example.com
-    smtp_port: 587
-    username: your_username
-    password: your_password
-    sender: sender@example.com
-    recipients:
-      - recipient1@example.com
-      - recipient2@example.com
-  webhook:
-    enabled: true
-    url: https://example.com/webhook
-  desktop:
-    enabled: true
-```
-
-The notification system supports:
-- Email notifications with HTML formatting
-- Webhook integration for services like Slack, Discord, etc.
-- Desktop notifications for immediate alerts
-- Throttling rules to prevent notification spam
+Configure notifications in `config.yml` as described in the **Configuration (`config.yml`)** section above.
+The system supports various channels and fine-grained control over routing and throttling.
 
 ### Monitoring Dashboard
 
@@ -245,6 +313,7 @@ Test coverage reports are generated in the `coverage_html` directory.
 
 - `tests/test_mcp_integration.py`: Tests for the MCP client functionality
 - `tests/test_main_mcp.py`: Tests for integration with the main script
+- `tests/test_config_loader.py`: Tests for the ConfigManager (NEW)
 
 For more details on testing, see [tests/README.md](tests/README.md).
 
