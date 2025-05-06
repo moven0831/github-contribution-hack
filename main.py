@@ -1,5 +1,5 @@
 import os
-import yaml
+# import yaml # Removed, will use ConfigManager
 import random
 import time
 import subprocess
@@ -16,15 +16,19 @@ import tempfile
 from pathlib import Path
 import sys
 import argparse
+import logging # Added for logging
 
 # Add the new modules
 from cli_interface import InteractiveCLI
 from visualization import ContributionVisualizer
 from notification_system import setup_notifications, NotificationManager
 from web_interface import WebInterface, setup_web_interface
+from config_loader import ConfigManager # Added ConfigManager
 
 # Add LRU cache for efficient function calls
 from functools import lru_cache
+
+logger = logging.getLogger(__name__) # Added logger
 
 class GitHubContributionHack:
     def __init__(self, config_path='config.yml'):
@@ -36,9 +40,9 @@ class GitHubContributionHack:
         # Load environment variables
         load_dotenv()
         
-        # Load configuration
-        with open(config_path, 'r') as config_file:
-            self.config = yaml.safe_load(config_file)
+        # Initialize ConfigManager
+        self.config_manager = ConfigManager(config_path=config_path)
+        # self.config = self.config_manager.get_all_config() # No longer need self.config directly if using manager
         
         self._validate_environment()
         self._setup_secure_credentials()
@@ -48,49 +52,52 @@ class GitHubContributionHack:
         self.session = get_session()
         
         # Get repositories to contribute to
-        self.repositories = self.config.get('repositories', [])
+        self.repositories = self.config_manager.get('repositories', [])
         if not self.repositories:
+            # Consider logging this error instead of raising, or handle more gracefully
+            logger.error("No repositories specified in config.yml")
             raise ValueError("No repositories specified in config.yml")
         
         # Commit frequency settings
-        self.min_commits = self.config.get('min_commits', 1)
-        self.max_commits = self.config.get('max_commits', 3)
+        self.min_commits = self.config_manager.get('min_commits', 1)
+        self.max_commits = self.config_manager.get('max_commits', 3)
         
         # Interval settings (in hours)
-        self.min_interval = self.config.get('min_interval', 12)
-        self.max_interval = self.config.get('max_interval', 24)
+        self.min_interval = self.config_manager.get('min_interval', 12)
+        self.max_interval = self.config_manager.get('max_interval', 24)
         
         # Configure performance settings
-        self.max_workers = self.config.get('performance', {}).get('max_workers', 4)
-        self.parallel_repos = self.config.get('performance', {}).get('parallel_repos', True)
+        self.max_workers = self.config_manager.get('performance.max_workers', 4)
+        self.parallel_repos = self.config_manager.get('performance.parallel_repos', True)
         
         # Use a local shared repo cache to avoid repeated cloning
         self.repo_cache_dir = Path(tempfile.gettempdir()) / 'github_contrib_cache'
         os.makedirs(self.repo_cache_dir, exist_ok=True)
         
         self.commit_pattern_model = self._load_commit_pattern_model()
-        self.file_types = ['txt', 'md', 'py', 'js', 'json']
+        self.file_types = self.config_manager.get('file_types', ['txt', 'md', 'py', 'js', 'json'])
         self.analytics = ContributionAnalytics()
         self._setup_github_verification()
         
         # Initialize notification system
         self.notification_manager = None
-        if self.config.get('notifications', {}).get('enabled', True):
+        if self.config_manager.get('notifications.enabled', True):
             try:
-                self.notification_manager = setup_notifications(self.config)
-                print("Notification system initialized successfully")
+                # Pass the whole config manager or just the relevant part
+                self.notification_manager = setup_notifications(self.config_manager)
+                logger.info("Notification system initialized successfully")
             except Exception as e:
-                print(f"Failed to initialize notification system: {str(e)}")
+                logger.error(f"Failed to initialize notification system: {str(e)}")
                 
         # Initialize MCP client if MCP integration is enabled
         self.mcp_client = None
-        if self.config.get('mcp_integration', {}).get('enabled', False):
+        if self.config_manager.get('mcp_integration.enabled', False):
             try:
-                self.mcp_client = get_mcp_client()
-                print("MCP integration enabled successfully")
+                self.mcp_client = get_mcp_client(self.config_manager) # Pass config manager if needed
+                logger.info("MCP integration enabled successfully")
             except Exception as e:
-                print(f"Failed to initialize MCP integration: {str(e)}")
-                print("Falling back to standard content generation")
+                logger.error(f"Failed to initialize MCP integration: {str(e)}")
+                logger.warning("Falling back to standard content generation")
     
     def _validate_environment(self):
         """Validate required environment setup"""
@@ -157,12 +164,12 @@ class GitHubContributionHack:
     def generate_random_content(self):
         """Generate context-aware commit content"""
         # Check if MCP integration is enabled and client is available
-        if self.config.get('mcp_integration', {}).get('enabled', False) and self.mcp_client:
+        if self.config_manager.get('mcp_integration.enabled', False) and self.mcp_client:
             return self._generate_mcp_content()
-        elif random.random() < 0.3 and self.commit_pattern_model:
+        elif random.random() < self.config_manager.get('commit_generation.ml_based_chance', 0.3) and self.commit_pattern_model:
             # Generate ML-based commit message
             message = self.commit_pattern_model.make_sentence()
-            content = self._generate_code_content() if random.random() < 0.4 else self._generate_doc_content()
+            content = self._generate_code_content() if random.random() < self.config_manager.get('commit_generation.code_content_chance', 0.4) else self._generate_doc_content()
         else:
             # Fallback to random content
             message, content = self._basic_content_generation()
@@ -201,7 +208,7 @@ class GitHubContributionHack:
         """Generate content using MCP integration"""
         try:
             # Select a language based on configuration or random choice
-            language_weights = self.config.get('mcp_integration', {}).get('language_weights', {
+            language_weights = self.config_manager.get('mcp_integration.language_weights', {
                 'python': 0.4, 
                 'javascript': 0.3, 
                 'markdown': 0.2,
@@ -216,7 +223,7 @@ class GitHubContributionHack:
             # Generate code using MCP
             context = {
                 "purpose": "github-contribution",
-                "complexity": self.config.get('mcp_integration', {}).get('complexity', 'low'),
+                "complexity": self.config_manager.get('mcp_integration.complexity', 'low'),
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
@@ -230,13 +237,14 @@ class GitHubContributionHack:
             }]
             
             # Generate commit message
-            current_repo = random.choice(self.repositories)
+            current_repo = random.choice(self.repositories) # self.repositories is already loaded using config_manager
             commit_message = self.mcp_client.generate_commit_message(changes, current_repo)
             
             return commit_message, generated_code
             
         except Exception as e:
-            print(f"MCP content generation failed: {str(e)}")
+            # Consider more specific exception handling or logging
+            logger.error(f"MCP content generation failed: {str(e)}")
             # Fall back to basic content generation
             return self._basic_content_generation()
 
@@ -367,7 +375,7 @@ class GitHubContributionHack:
         file_ext = "txt"  # Default fallback
         
         # MCP integration: Detect file type for better filename
-        if self.config.get('mcp_integration', {}).get('enabled', False):
+        if self.config_manager.get('mcp_integration.enabled', False):
             if content.startswith("# ") or "def " in content or "import " in content:
                 file_ext = "py"
             elif content.startswith("//") or "function " in content or "const " in content:
@@ -385,13 +393,13 @@ class GitHubContributionHack:
             f.write(content)
 
         # Check if commit splitting is enabled
-        if self.config.get('split_commits', {}).get('enabled', False):
+        if self.config_manager.get('split_commits.enabled', False):
             # Read the file contents
             with open(file_path, 'r') as f:
                 lines = f.readlines()
 
-            max_lines = self.config['split_commits']['max_lines_per_commit']
-            prefix = self.config['split_commits']['message_prefix']
+            max_lines = self.config_manager['split_commits']['max_lines_per_commit']
+            prefix = self.config_manager['split_commits']['message_prefix']
 
             # Split the lines into chunks
             line_chunks = [lines[i:i+max_lines] for i in range(0, len(lines), max_lines)]
@@ -444,107 +452,37 @@ class GitHubContributionHack:
             time.sleep(300)  # Update every 5 minutes
 
 def main():
-    """
-    Main entry point for the application
-    """
-    # Parse command line arguments
+    """Main function to run the GitHub Contribution Hack"""
     parser = argparse.ArgumentParser(description="GitHub Contribution Hack")
     parser.add_argument('--config', default='config.yml', help='Path to configuration file')
-    parser.add_argument('--interactive', action='store_true', help='Start interactive CLI')
-    parser.add_argument('--web', action='store_true', help='Start web interface')
-    parser.add_argument('--port', type=int, default=5000, help='Port for web interface')
-    parser.add_argument('--host', default='127.0.0.1', help='Host for web interface')
-    parser.add_argument('--visualize', choices=['heatmap', 'streak', 'timeline', 'repo', 'all'], 
-                      help='Generate visualization and exit')
-    
+    parser.add_argument('--mode', choices=['monitor', 'interactive', 'web'], default='monitor', help='Operation mode')
+    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
+
     args = parser.parse_args()
-    
-    # Initialize the core system
+
+    # Setup logging
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
     try:
         hack = GitHubContributionHack(config_path=args.config)
-    except Exception as e:
-        print(f"Error initializing system: {str(e)}")
-        sys.exit(1)
-    
-    # Check if we need to generate visualization only
-    if args.visualize:
-        try:
-            visualizer = ContributionVisualizer()
-            
-            if args.visualize == 'heatmap' or args.visualize == 'all':
-                path = visualizer.generate_heatmap()
-                print(f"Generated heatmap: {path}")
-                
-            if args.visualize == 'streak' or args.visualize == 'all':
-                path = visualizer.generate_streak_chart()
-                print(f"Generated streak chart: {path}")
-                
-            if args.visualize == 'timeline' or args.visualize == 'all':
-                path = visualizer.generate_activity_timeline()
-                print(f"Generated timeline: {path}")
-                
-            if args.visualize == 'repo' or args.visualize == 'all':
-                path = visualizer.generate_repo_distribution()
-                print(f"Generated repository distribution: {path}")
-                
-            return
-        except Exception as e:
-            print(f"Error generating visualization: {str(e)}")
-            sys.exit(1)
-    
-    # Check if we should start the web interface
-    if args.web:
-        try:
-            # Set up the web interface
-            setup_web_interface()
-            
-            # Create and start the web interface
-            interface = WebInterface(
-                config_path=args.config,
-                host=args.host,
-                port=args.port
-            )
-            
-            # Start the web interface in a separate thread
-            interface.start(debug=False)
-            
-            print(f"Web interface started at http://{args.host}:{args.port}/")
-            
-            # If only web interface was requested, keep the main thread alive
-            if not args.interactive:
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    print("Shutting down web interface...")
-                    interface.stop()
-        except Exception as e:
-            print(f"Error starting web interface: {str(e)}")
-            sys.exit(1)
-    
-    # Check if we should start the interactive CLI
-    if args.interactive:
-        try:
-            # Create CLI instance with analytics and health monitor
-            cli = InteractiveCLI(
-                analytics=hack.analytics,
-                health_monitor=None  # TODO: Add health monitor integration
-            )
-            
-            # Start the CLI
+        
+        if args.mode == 'monitor':
+            logger.info("Starting in monitoring mode...")
+            hack.start_monitoring()
+        elif args.mode == 'interactive':
+            logger.info("Starting in interactive CLI mode...")
+            cli = InteractiveCLI(hack) # Pass the hack instance which has config_manager
             cli.start()
-        except Exception as e:
-            print(f"Error starting interactive CLI: {str(e)}")
-            sys.exit(1)
-    
-    # If neither interactive nor web mode was specified, run in standard mode
-    if not args.interactive and not args.web:
-        try:
-            # Make contributions
-            hack.make_contributions()
-        except Exception as e:
-            print(f"Error during contribution process: {str(e)}")
-            sys.exit(1)
+        elif args.mode == 'web':
+            logger.info("Starting web interface...")
+            # Ensure WebInterface also uses the ConfigManager instance or path
+            web_interface = setup_web_interface(config_manager=hack.config_manager) 
+            web_interface.start(debug=args.debug)
+            
+    except Exception as e:
+        logger.error(f"An error occurred: {e}", exc_info=True) # Add exc_info for traceback
+        sys.exit(1)
 
 if __name__ == "__main__":
     main() 
