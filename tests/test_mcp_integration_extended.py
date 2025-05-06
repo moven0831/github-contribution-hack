@@ -111,10 +111,10 @@ class TestMCPContentGeneration(unittest.TestCase):
         """Test fallback code generation for unknown language"""
         # Call with unknown language
         code = self.mcp_client._generate_fallback_code("unknown_language")
-        
+    
         # Verify generic fallback was generated - adjust assertion to match actual output
-        self.assertIn("Generated", code)
-        self.assertIn("unknown_language", code.lower())
+        # Check for the new format
+        self.assertIn("Fallback content for unknown_language generated at", code)
 
 class TestMCPClientRetryLogic(unittest.TestCase):
     """Tests for the retry logic in MCP client"""
