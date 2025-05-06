@@ -16,6 +16,8 @@ from email.mime.multipart import MIMEMultipart
 from typing import Dict, List, Callable, Any, Optional
 from datetime import datetime, timedelta
 
+from config_loader import ConfigManager
+
 # Configure logger
 logger = logging.getLogger(__name__)
 
@@ -232,13 +234,35 @@ class DesktopNotificationChannel(NotificationChannel):
 class NotificationManager:
     """Manages notification channels and routing"""
     
-    def __init__(self):
-        """Initialize notification manager"""
+    def __init__(self, manager_config: Optional[Dict] = None):
+        """Initialize notification manager
+
+        Args:
+            manager_config: Configuration for the manager itself (e.g. history size, routing)
+        """
         self.channels = {}
         self.notification_history = []
-        self.max_history = 100
         self.notification_count = 0
         self.throttle_rules = {}
+        
+        # Level-based routing (example: errors to email and webhook, info to desktop)
+        self.level_routing = {
+            "info": ["desktop"], # Default for info
+            "warning": ["desktop", "email"], # Default for warning
+            "error": ["email", "webhook"] # Default for error
+        }
+        self.max_history = 100 # Default max history
+
+        if manager_config:
+            self.max_history = manager_config.get('max_history', self.max_history)
+            self.level_routing.update(manager_config.get('level_routing', {}))
+            # Load throttle rules from config
+            for rule_name, rule_config in manager_config.get('throttle_rules', {}).items():
+                self.set_throttle_rule(
+                    rule_config.get('pattern', f'^{rule_name}$'), # Use rule_name as pattern if not specified
+                    rule_config.get('max_count', 5),
+                    rule_config.get('time_window_seconds', 3600)
+                )
         
     def add_channel(self, channel: NotificationChannel):
         """
@@ -280,37 +304,47 @@ class NotificationManager:
             logger.info(f"Notification throttled: {title}")
             return {}
             
-        target_channels = channels or list(self.channels.keys())
+        target_channel_names = set(channels) if channels is not None else set()
+        if not target_channel_names: # If no specific channels requested, use level-based routing
+            target_channel_names.update(self.level_routing.get(level, []))
+            # Fallback to all channels if level has no specific routing and no channels were given
+            if not target_channel_names and channels is None:
+                target_channel_names.update(self.channels.keys())
+
+        if not target_channel_names:
+            logger.warning(f"No target channels for notification '{title}' (level: {level}). Check routing config.")
+            self._record_notification(title, message, level, {}, "No target channels")
+            return {}
+
         results = {}
         
-        for channel_name in target_channels:
+        for channel_name in target_channel_names:
             if channel_name in self.channels:
                 channel = self.channels[channel_name]
                 results[channel_name] = channel.send(title, message, level, **kwargs)
                 
-        # Record notification
         self._record_notification(title, message, level, results)
-                
         return results
         
     def _record_notification(self, title: str, message: str, level: str, 
-                            results: Dict[str, bool]):
-        """Record a notification in history"""
+                            results: Dict[str, bool], status_message: Optional[str] = None):
+        """Record notification attempt to history"""
         notification = {
             "id": self.notification_count,
             "timestamp": datetime.now().isoformat(),
             "title": title,
             "message": message,
             "level": level,
-            "results": results
+            "results": results,
+            "status_message": status_message
         }
         
         self.notification_history.append(notification)
         self.notification_count += 1
         
-        # Trim history if needed
+        # Trim history if it exceeds max size
         if len(self.notification_history) > self.max_history:
-            self.notification_history = self.notification_history[-self.max_history:]
+            self.notification_history.pop(0)
             
     def get_notification_history(self, limit: int = None) -> List[Dict]:
         """
@@ -376,73 +410,185 @@ class NotificationManager:
         return True
 
 # Example setup for the notification system
-def setup_notifications(config: Dict) -> NotificationManager:
+def setup_notifications(config_manager: ConfigManager) -> Optional[NotificationManager]:
     """
-    Set up notification manager based on configuration
+    Set up notification channels based on configuration
     
     Args:
-        config: Configuration dictionary
+        config_manager: The ConfigManager instance providing all configurations.
         
     Returns:
-        Configured NotificationManager instance
+        NotificationManager instance or None if notifications are disabled or misconfigured.
     """
-    manager = NotificationManager()
+    if not config_manager.get('notifications.enabled', False):
+        logger.info("Notification system is disabled in the configuration.")
+        return None
+
+    # Get the general notification manager settings
+    manager_settings = config_manager.get('notifications.manager', {})
+    manager = NotificationManager(manager_config=manager_settings)
     
-    # Set up channels based on configuration
-    notification_config = config.get('notifications', {})
-    
-    # Email notifications
-    if notification_config.get('email', {}).get('enabled', False):
-        email_config = notification_config['email']
-        manager.add_channel(EmailNotificationChannel(
-            smtp_server=email_config.get('smtp_server', ''),
-            smtp_port=email_config.get('smtp_port', 587),
-            username=email_config.get('username', ''),
-            password=email_config.get('password', ''),
-            sender=email_config.get('sender', ''),
-            recipients=email_config.get('recipients', [])
-        ))
-    
-    # Webhook notifications
-    if notification_config.get('webhook', {}).get('enabled', False):
-        webhook_config = notification_config['webhook']
-        manager.add_channel(WebhookNotificationChannel(
-            webhook_url=webhook_config.get('url', ''),
-            custom_headers=webhook_config.get('headers', {})
-        ))
-    
-    # Desktop notifications
-    if notification_config.get('desktop', {}).get('enabled', False):
-        manager.add_channel(DesktopNotificationChannel())
-    
-    # Set up throttling rules
-    throttle_rules = notification_config.get('throttle_rules', [])
-    for rule in throttle_rules:
-        manager.set_throttle_rule(
-            pattern=rule.get('pattern', ''),
-            max_count=rule.get('max_count', 5),
-            time_window=rule.get('time_window', 3600)
-        )
-    
+    # Email channel
+    email_config = config_manager.get('notifications.email')
+    if email_config and email_config.get('enabled', False):
+        try:
+            email_channel = EmailNotificationChannel(
+                smtp_server=email_config['smtp_server'],
+                smtp_port=int(email_config.get('smtp_port', 587)), # Ensure int, provide default
+                username=email_config['username'],
+                password=email_config['password'],
+                sender=email_config['sender'],
+                recipients=email_config['recipients']
+            )
+            manager.add_channel(email_channel)
+            logger.info("Email notification channel configured.")
+        except KeyError as e:
+            logger.error(f"Missing key in email configuration: {e}. Email channel disabled.")
+        except Exception as e:
+            logger.error(f"Failed to initialize EmailNotificationChannel: {str(e)}. Email channel disabled.")
+
+    # Webhook channel
+    webhook_config = config_manager.get('notifications.webhook')
+    if webhook_config and webhook_config.get('enabled', False):
+        if webhook_config.get('url'):
+            try:
+                webhook_channel = WebhookNotificationChannel(
+                    webhook_url=webhook_config['url'],
+                    custom_headers=webhook_config.get('custom_headers')
+                )
+                manager.add_channel(webhook_channel)
+                logger.info("Webhook notification channel configured.")
+            except Exception as e:
+                logger.error(f"Failed to initialize WebhookNotificationChannel: {str(e)}. Webhook channel disabled.")
+        else:
+            logger.warning("Webhook URL not provided. Webhook channel disabled.")
+
+    # Desktop notification channel
+    desktop_config = config_manager.get('notifications.desktop')
+    if desktop_config and desktop_config.get('enabled', False):
+        try:
+            desktop_channel = DesktopNotificationChannel()
+            if desktop_channel.available: # Only add if underlying libraries are present
+                manager.add_channel(desktop_channel)
+                logger.info("Desktop notification channel configured.")
+            else:
+                logger.warning("Desktop notification channel enabled in config, but dependencies are missing. Channel disabled.")
+        except Exception as e:
+             logger.error(f"Failed to initialize DesktopNotificationChannel: {str(e)}. Desktop channel disabled.")
+
+    if not manager.channels:
+        logger.warning("No notification channels were successfully configured, though notifications are enabled.")
+        return None # Or return manager if partial functionality is acceptable
+        
     return manager
 
 
 def main():
-    """Test notification system"""
-    manager = NotificationManager()
+    """Example usage of the notification system (for testing)"""
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
-    # Add a desktop notification channel
-    manager.add_channel(DesktopNotificationChannel())
+    # Create a dummy config.yml for testing setup_notifications
+    dummy_config_data = {
+        'notifications': {
+            'enabled': True,
+            'manager': {
+                'max_history': 50,
+                'level_routing': {
+                    'info': ['desktop'],
+                    'error': ['email', 'webhook']
+                },
+                'throttle_rules': {
+                    'frequent_error': {
+                        'pattern': '.*ErrorOccurred.*', # Regex pattern for title
+                        'max_count': 3,
+                        'time_window_seconds': 60 
+                    }
+                }
+            },
+            'email': {
+                'enabled': True,
+                'smtp_server': 'smtp.example.com', # Replace with your SMTP server
+                'smtp_port': 587,
+                'username': 'user@example.com',    # Replace with your username
+                'password': 'your_password',       # Replace with your password
+                'sender': 'notifications@example.com',
+                'recipients': ['recipient1@example.com', 'recipient2@example.com']
+            },
+            'webhook': {
+                'enabled': True,
+                'url': 'https://webhook.site/your-unique-url', # Replace with a test webhook URL
+                'custom_headers': {'X-API-Key': 'secret-key'}
+            },
+            'desktop': {
+                'enabled': True
+            }
+        }
+    }
+    # Create a ConfigManager instance with this dummy data
+    # For a real scenario, ConfigManager would load from 'config.yml'
+    class MockConfigManager:
+        def __init__(self, data):
+            self.data = data
+        def get(self, key, default=None):
+            keys = key.split('.')
+            val = self.data
+            try:
+                for k in keys:
+                    val = val[k]
+                return val
+            except KeyError:
+                return default
+
+    test_config_manager = MockConfigManager(dummy_config_data)
+
+    notification_mgr = setup_notifications(test_config_manager)
     
-    # Send a test notification
-    results = manager.notify(
-        "Test Notification",
-        "This is a test notification from the GitHub Contribution Hack.",
-        "info"
-    )
-    
-    print(f"Notification results: {results}")
-    print(f"Notification history: {manager.get_notification_history()}")
+    if notification_mgr:
+        logger.info("NotificationManager initialized.")
+        
+        # Test sending notifications
+        results_info = notification_mgr.notify(
+            "Test Info Notification", 
+            "This is an informational message.", 
+            level="info"
+        )
+        logger.info(f"Info notification results: {results_info}")
+        
+        time.sleep(1) # ensure different timestamp
+        results_warning = notification_mgr.notify(
+            "Test Warning Notification", 
+            "This is a warning message.", 
+            level="warning", 
+            channels=['email'] # Override routing, send only to email
+        )
+        logger.info(f"Warning notification results: {results_warning}")
+
+        time.sleep(1)
+        results_error = notification_mgr.notify(
+            "Test Error Notification: ErrorOccurredEvent", 
+            "This is a critical error message.", 
+            level="error",
+            details={"code": 500, "component": "API"}
+        )
+        logger.info(f"Error notification results: {results_error}")
+
+        # Test throttling
+        for i in range(5):
+            time.sleep(0.2)
+            throttled_results = notification_mgr.notify(
+                f"Frequent ErrorOccurredEvent #{i+1}", 
+                "Testing throttle rule.", 
+                level="error"
+            )
+            logger.info(f"Throttled Error notification {i+1} results: {throttled_results}")
+
+        # Test history
+        history = notification_mgr.get_notification_history(limit=5)
+        logger.info("Recent notification history (last 5):")
+        for item in history:
+            logger.info(f"  - {item['timestamp']} [{item['level'].upper()}] {item['title']}: Sent to {item['sent_to']}")
+    else:
+        logger.warning("NotificationManager failed to initialize.")
 
 if __name__ == "__main__":
     main() 
