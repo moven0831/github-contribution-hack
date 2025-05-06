@@ -36,29 +36,88 @@ class MCPClient:
     """
     
     def __init__(self, api_key: Optional[str] = None, api_endpoint: Optional[str] = None, 
-                 max_retries: int = 3, request_timeout: int = 15,
+                 max_retries: Optional[int] = None, # Allow None for direct params
+                 request_timeout: Optional[int] = None, # Allow None for direct params
                  config_manager: Optional[ConfigManager] = None):
         """
         Initialize the MCP client
         
-        :param api_key: MCP API key (can be fetched from env or config)
-        :param api_endpoint: MCP API endpoint (can be fetched from env or config)
-        :param max_retries: Maximum number of retries for API calls (can be fetched from config)
-        :param request_timeout: Timeout for API requests in seconds (can be fetched from config)
+        Priority Order: Direct Param > ConfigManager > Environment Variable > Default
+
+        :param api_key: MCP API key
+        :param api_endpoint: MCP API endpoint
+        :param max_retries: Maximum number of retries for API calls
+        :param request_timeout: Timeout for API requests in seconds
         :param config_manager: Optional ConfigManager instance
         """
-        if config_manager:
-            self.api_key = api_key or config_manager.get('mcp_integration.api_key') or os.environ.get("MCP_API_KEY")
-            self.api_endpoint = api_endpoint or config_manager.get('mcp_integration.api_endpoint') or os.environ.get("MCP_API_ENDPOINT", "https://api.mcp.dev/v1")
-            self.max_retries = config_manager.get('mcp_integration.max_retries', max_retries)
-            self.request_timeout = config_manager.get('mcp_integration.request_timeout', request_timeout)
-        else:
-            # Legacy behavior if no config_manager is passed
-            self.api_key = api_key or os.environ.get("MCP_API_KEY")
-            self.api_endpoint = api_endpoint or os.environ.get("MCP_API_ENDPOINT", "https://api.mcp.dev/v1")
-            self.max_retries = max_retries
-            self.request_timeout = request_timeout
         
+        # Determine final values based on priority
+        final_api_key = api_key
+        final_api_endpoint = api_endpoint
+        final_max_retries = max_retries
+        final_request_timeout = request_timeout
+        
+        config_api_key = None
+        config_api_endpoint = None
+        config_max_retries = None
+        config_request_timeout = None
+
+        if config_manager:
+            config_api_key = config_manager.get('mcp_integration.api_key')
+            config_api_endpoint = config_manager.get('mcp_integration.api_endpoint')
+            config_max_retries = config_manager.get('mcp_integration.max_retries')
+            config_request_timeout = config_manager.get('mcp_integration.request_timeout')
+
+        # API Key: Param > Config > Env > (Error if None)
+        if final_api_key is None:
+            final_api_key = config_api_key
+        if final_api_key is None:
+            final_api_key = os.environ.get("MCP_API_KEY")
+        
+        # API Endpoint: Param > Config > Env > Default
+        default_endpoint = "https://api.mcp.dev/v1"
+        if final_api_endpoint is None:
+            final_api_endpoint = config_api_endpoint
+        if final_api_endpoint is None:
+             final_api_endpoint = os.environ.get("MCP_API_ENDPOINT")
+        if final_api_endpoint is None:
+            final_api_endpoint = default_endpoint
+
+        # Max Retries: Param > Config > Env > Default
+        default_max_retries = 3
+        if final_max_retries is None:
+            final_max_retries = config_max_retries
+        if final_max_retries is None:
+            env_retries = os.environ.get("MCP_MAX_RETRIES")
+            if env_retries is not None:
+                try:
+                    final_max_retries = int(env_retries)
+                except ValueError:
+                    logger.warning(f"Invalid value for MCP_MAX_RETRIES environment variable: '{env_retries}'. Using default.")
+        if final_max_retries is None:
+             final_max_retries = default_max_retries
+
+        # Request Timeout: Param > Config > Env > Default
+        default_request_timeout = 15
+        if final_request_timeout is None:
+            final_request_timeout = config_request_timeout
+        if final_request_timeout is None:
+            env_timeout = os.environ.get("MCP_REQUEST_TIMEOUT")
+            if env_timeout is not None:
+                try:
+                    final_request_timeout = int(env_timeout)
+                except ValueError:
+                     logger.warning(f"Invalid value for MCP_REQUEST_TIMEOUT environment variable: '{env_timeout}'. Using default.")
+        if final_request_timeout is None:
+             final_request_timeout = default_request_timeout
+        
+        # Assign final values to instance attributes
+        self.api_key = final_api_key
+        self.api_endpoint = final_api_endpoint
+        self.max_retries = final_max_retries
+        self.request_timeout = final_request_timeout
+        
+        # Validate API Key
         if not self.api_key:
             logger.error("MCP API key not provided via direct param, config, or MCP_API_KEY environment variable.")
             raise ValueError("MCP API key not provided. Set MCP_API_KEY, configure in config.yml, or pass directly.")
@@ -328,6 +387,7 @@ def get_mcp_client(config_manager: Optional[ConfigManager] = None) -> Optional[M
     """
     Get a shared instance of the MCPClient.
     Initializes the client on first call using environment variables or config.
+    Uses Priority: ConfigManager > Environment Variable > Default
 
     Args:
         config_manager: Optional ConfigManager instance to load MCP settings.
@@ -339,31 +399,50 @@ def get_mcp_client(config_manager: Optional[ConfigManager] = None) -> Optional[M
     
     if _mcp_client_instance is None:
         try:
+            # Determine parameters using Config -> Env -> Default priority
+            # Note: MCPClient.__init__ itself now handles Param > Config > Env > Default
+            # We just need to gather the inputs for it based on Config > Env > Default for this factory function.
+            
+            api_key_to_pass = None
+            endpoint_to_pass = None
+            retries_to_pass = None
+            timeout_to_pass = None
+            
             if config_manager:
-                # If config_manager is provided, use it for initialization
-                api_key = config_manager.get('mcp_integration.api_key')
-                api_endpoint = config_manager.get('mcp_integration.api_endpoint')
-                max_retries = config_manager.get('mcp_integration.max_retries', 3)
-                request_timeout = config_manager.get('mcp_integration.request_timeout', 15)
-                
-                # Still allow environment variables to override if config values are None/empty
-                api_key = api_key or os.environ.get("MCP_API_KEY")
-                api_endpoint = api_endpoint or os.environ.get("MCP_API_ENDPOINT")
+                api_key_to_pass = config_manager.get('mcp_integration.api_key')
+                endpoint_to_pass = config_manager.get('mcp_integration.api_endpoint')
+                retries_to_pass = config_manager.get('mcp_integration.max_retries')
+                timeout_to_pass = config_manager.get('mcp_integration.request_timeout')
 
-                _mcp_client_instance = MCPClient(
-                    api_key=api_key,
-                    api_endpoint=api_endpoint,
-                    max_retries=max_retries,
-                    request_timeout=request_timeout,
-                    config_manager=config_manager # Pass it along for potential future use within MCPClient
-                )
-            else:
-                # Fallback to old behavior: direct env var usage if no config_manager
-                _mcp_client_instance = MCPClient()
+            # Fallback to environment variables only if config didn't provide a value
+            if api_key_to_pass is None:
+                 api_key_to_pass = os.environ.get("MCP_API_KEY")
+            if endpoint_to_pass is None:
+                 endpoint_to_pass = os.environ.get("MCP_API_ENDPOINT")
+            if retries_to_pass is None:
+                env_retries = os.environ.get("MCP_MAX_RETRIES")
+                if env_retries is not None:
+                     try: retries_to_pass = int(env_retries)
+                     except ValueError: pass # Ignore invalid env var here, MCPClient init will use default
+            if timeout_to_pass is None:
+                env_timeout = os.environ.get("MCP_REQUEST_TIMEOUT")
+                if env_timeout is not None:
+                     try: timeout_to_pass = int(env_timeout)
+                     except ValueError: pass # Ignore invalid env var here, MCPClient init will use default
+
+            # Instantiate MCPClient - its internal logic handles defaults if params are None
+            # Pass config_manager along so MCPClient can use it if needed (though currently redundant with param passing)
+            _mcp_client_instance = MCPClient(
+                api_key=api_key_to_pass,
+                api_endpoint=endpoint_to_pass,
+                max_retries=retries_to_pass,
+                request_timeout=timeout_to_pass,
+                config_manager=config_manager # Pass original CM if present
+            )
             
             logger.info("MCPClient instance created.")
 
-        except ValueError as e: # Handles missing API key
+        except ValueError as e: # Handles missing API key from MCPClient init
             logger.error(f"Failed to initialize MCPClient: {e}")
             _mcp_client_instance = None # Ensure it remains None on failure
         except Exception as e:
