@@ -9,6 +9,7 @@ import time
 
 # Import our retry module
 from retry import retry_with_backoff, RetryableHTTP
+from config_loader import ConfigManager
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -34,24 +35,33 @@ class MCPClient:
     Enables AI-powered code and commit message generation
     """
     
-    def __init__(self, api_key: str = None, api_endpoint: str = None, 
-                max_retries: int = 3, request_timeout: int = 15):
+    def __init__(self, api_key: Optional[str] = None, api_endpoint: Optional[str] = None, 
+                 max_retries: int = 3, request_timeout: int = 15,
+                 config_manager: Optional[ConfigManager] = None):
         """
         Initialize the MCP client
         
-        :param api_key: MCP API key
-        :param api_endpoint: MCP API endpoint
-        :param max_retries: Maximum number of retries for API calls
-        :param request_timeout: Timeout for API requests in seconds
+        :param api_key: MCP API key (can be fetched from env or config)
+        :param api_endpoint: MCP API endpoint (can be fetched from env or config)
+        :param max_retries: Maximum number of retries for API calls (can be fetched from config)
+        :param request_timeout: Timeout for API requests in seconds (can be fetched from config)
+        :param config_manager: Optional ConfigManager instance
         """
-        self.api_key = api_key or os.environ.get("MCP_API_KEY")
-        self.api_endpoint = api_endpoint or os.environ.get("MCP_API_ENDPOINT", "https://api.mcp.dev/v1")
-        self.max_retries = max_retries
-        self.request_timeout = request_timeout
+        if config_manager:
+            self.api_key = api_key or config_manager.get('mcp_integration.api_key') or os.environ.get("MCP_API_KEY")
+            self.api_endpoint = api_endpoint or config_manager.get('mcp_integration.api_endpoint') or os.environ.get("MCP_API_ENDPOINT", "https://api.mcp.dev/v1")
+            self.max_retries = config_manager.get('mcp_integration.max_retries', max_retries)
+            self.request_timeout = config_manager.get('mcp_integration.request_timeout', request_timeout)
+        else:
+            # Legacy behavior if no config_manager is passed
+            self.api_key = api_key or os.environ.get("MCP_API_KEY")
+            self.api_endpoint = api_endpoint or os.environ.get("MCP_API_ENDPOINT", "https://api.mcp.dev/v1")
+            self.max_retries = max_retries
+            self.request_timeout = request_timeout
         
         if not self.api_key:
-            logger.error("MCP API key not provided")
-            raise ValueError("MCP API key not provided. Set MCP_API_KEY environment variable or pass directly.")
+            logger.error("MCP API key not provided via direct param, config, or MCP_API_KEY environment variable.")
+            raise ValueError("MCP API key not provided. Set MCP_API_KEY, configure in config.yml, or pass directly.")
         
         # Cache commonly used data
         self._headers = {
@@ -248,71 +258,116 @@ def process_data(items):
     for item in items:
         # Simple transformation
         if isinstance(item, (int, float)):
-            results.append(item * 1.5)
+            results.append(item * 2)
         elif isinstance(item, str):
             results.append(item.upper())
         else:
-            results.append(item)
+            results.append(None) # Default for other types
     return results
 
-# Example usage
-data = [1, 2, "test", 4.5]
-print(f"Processed data: {{process_data(data)}}")
+print(f"Fallback Python code generated at {timestamp}")
 """,
             "javascript": f"""// Generated fallback code at {timestamp}
 function processData(items) {{
-    /**
-     * Process a list of data items
-     * 
-     * @param {{Array}} items - Items to process
-     * @returns {{Array}} - Processed data
-     */
+    // Process an array of data items
+    console.log('Processing items...', items.length);
     return items.map(item => {{
-        // Simple transformation
-        if (typeof item === 'number') {{
-            return item * 1.5;
-        }} else if (typeof item === 'string') {{
-            return item.toUpperCase();
-        }}
-        return item;
+        if (typeof item === 'number') return item * 2;
+        if (typeof item === 'string') return item.toUpperCase();
+        return null;
     }});
 }}
 
-// Example usage
-const data = [1, 2, "test", 4.5];
-console.log(`Processed data: ${{JSON.stringify(processData(data))}}`);
+console.log('Fallback JavaScript code generated at {timestamp}');
+""",
+            "java": f"""// Generated fallback code at {timestamp}
+import java.util.List;
+import java.util.ArrayList;
+
+public class FallbackProcessor {{
+    public List<Object> processData(List<Object> items) {{
+        System.out.println("Processing items...");
+        List<Object> results = new ArrayList<>();
+        for (Object item : items) {{
+            if (item instanceof Integer || item instanceof Double) {{
+                results.add(((Number)item).doubleValue() * 2);
+            }}
+            else if (item instanceof String) {{
+                results.add(((String)item).toUpperCase());
+            }}
+            else {{
+                results.add(null);
+            }}
+        }}
+        return results;
+    }}
+}}
+
+// Fallback Java code generated at {timestamp}
+""",
+            "text": f"Fallback text content generated at {timestamp}.\nThis is a placeholder because the primary content generation service was unavailable.",
+            "markdown": f"""# Fallback Content - {timestamp}
+
+This is fallback Markdown content. The main content generation service (MCP) might be unavailable.
+
+- Item 1
+- Item 2
+
+```
+Some example code or data might go here.
+```
 """
         }
         
-        # Add a default template for markdown
-        templates["markdown"] = f"""# Generated Markdown Content
+        return templates.get(language.lower(), f"Fallback content for {language} generated at {timestamp}")
 
-## Summary
-This is fallback content generated at {timestamp}
+# Global MCP client instance
+_mcp_client_instance: Optional[MCPClient] = None
 
-## Features
-- Automatic generation
-- Fallback mechanism
-- Timestamp tracking
-
-## Example Code
-```python
-def example():
-    return "Hello World"
-```
-"""
-        
-        # Return template for specified language or generic content with language name
-        return templates.get(language, f"Generated content for {language} at {timestamp}")
-        
-def get_mcp_client() -> MCPClient:
+def get_mcp_client(config_manager: Optional[ConfigManager] = None) -> Optional[MCPClient]:
     """
-    Get configured MCP client using environment variables
-    
-    :return: Configured MCP client
+    Get a shared instance of the MCPClient.
+    Initializes the client on first call using environment variables or config.
+
+    Args:
+        config_manager: Optional ConfigManager instance to load MCP settings.
+
+    Returns:
+        MCPClient instance or None if initialization fails.
     """
-    # Get retry configuration from environment or use defaults
-    max_retries = int(os.environ.get("MCP_MAX_RETRIES", "3"))
-    request_timeout = int(os.environ.get("MCP_REQUEST_TIMEOUT", "30"))
+    global _mcp_client_instance
     
-    return MCPClient(max_retries=max_retries, request_timeout=request_timeout) 
+    if _mcp_client_instance is None:
+        try:
+            if config_manager:
+                # If config_manager is provided, use it for initialization
+                api_key = config_manager.get('mcp_integration.api_key')
+                api_endpoint = config_manager.get('mcp_integration.api_endpoint')
+                max_retries = config_manager.get('mcp_integration.max_retries', 3)
+                request_timeout = config_manager.get('mcp_integration.request_timeout', 15)
+                
+                # Still allow environment variables to override if config values are None/empty
+                api_key = api_key or os.environ.get("MCP_API_KEY")
+                api_endpoint = api_endpoint or os.environ.get("MCP_API_ENDPOINT")
+
+                _mcp_client_instance = MCPClient(
+                    api_key=api_key,
+                    api_endpoint=api_endpoint,
+                    max_retries=max_retries,
+                    request_timeout=request_timeout,
+                    config_manager=config_manager # Pass it along for potential future use within MCPClient
+                )
+            else:
+                # Fallback to old behavior: direct env var usage if no config_manager
+                _mcp_client_instance = MCPClient()
+            
+            logger.info("MCPClient instance created.")
+
+        except ValueError as e: # Handles missing API key
+            logger.error(f"Failed to initialize MCPClient: {e}")
+            _mcp_client_instance = None # Ensure it remains None on failure
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during MCPClient initialization: {e}", exc_info=True)
+            _mcp_client_instance = None # Ensure it remains None on failure
+            
+    return _mcp_client_instance 
